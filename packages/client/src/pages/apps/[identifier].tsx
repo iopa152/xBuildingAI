@@ -1,4 +1,5 @@
 import { fetchWebExtensionDetail } from "@buildingai/services/web";
+import { useAuthStore } from "@buildingai/stores";
 import NotFoundPage from "@buildingai/ui/components/exception/not-found-page";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -38,11 +39,20 @@ export default function AppIframePage() {
     retry: false,
   });
   const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+  // Host→extension auth bridge: the extension bundle consumes ?_t=base64(token)
+  // on load (see ExtensionMainLayout), so forward the current session token.
+  const authToken = useAuthStore((state) => state.auth.token);
   const iframeSrc = useMemo(() => {
     if (!identifier) return "";
     const subPath = wildcard ? `/${wildcard}` : "";
-    return `${getExtensionBaseUrl()}/extension/${identifier}${subPath}${location.search}${location.hash}`;
-  }, [identifier, wildcard, location.search, location.hash]);
+    const base = `${getExtensionBaseUrl()}/extension/${identifier}${subPath}`;
+    const params = new URLSearchParams(location.search);
+    if (authToken) {
+      params.set("_t", btoa(authToken));
+    }
+    const qs = params.toString();
+    return `${base}${qs ? `?${qs}` : ""}${location.hash}`;
+  }, [identifier, wildcard, location.search, location.hash, authToken]);
 
   // Listen for navigation messages from iframe (iframe → parent sync)
   useEffect(() => {
@@ -72,7 +82,12 @@ export default function AppIframePage() {
       const path = event.data.path ?? "";
       const search = event.data.search ?? "";
       const hash = event.data.hash ?? "";
-      const newUrl = `/apps/${identifier}${path}${search}${hash}`;
+      // when embedded inside the console layout (/console/apps/...), keep that
+      // prefix so the host sidebar stays visible around the iframe
+      const embedded = window.location.pathname.startsWith("/console/apps/");
+      const newUrl = embedded
+        ? `/console/apps/${identifier}${path}${search}${hash}`
+        : `/apps/${identifier}${path}${search}${hash}`;
 
       if (newUrl !== currentUrl) {
         navigate(newUrl, { replace: true });

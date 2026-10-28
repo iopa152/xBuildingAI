@@ -121,6 +121,7 @@ export const router = createBrowserRouter([
               </AuthGuard>
             ),
           },
+
           {
             path: "/agents",
             element: <AgentsIndexPage />,

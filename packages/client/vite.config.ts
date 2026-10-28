@@ -9,6 +9,10 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    // dev-only: prevent browser heuristic caching of transformed source modules
+    headers: { "Cache-Control": "no-store" },
+  },
   plugins: [
     react(),
     tailwindcss(),

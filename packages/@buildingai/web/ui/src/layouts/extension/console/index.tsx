@@ -16,6 +16,22 @@ const ExtensionConsoleLayout = ({
   identifier?: string;
   children?: ReactNode;
 }) => {
+  // when embedded in the host console iframe, render bare content only —
+  // no extension sidebar, no extension navbar, no extra margins
+  const embedded = typeof window !== "undefined" && window.parent !== window;
+
+  if (embedded) {
+    return (
+      <div className="flex h-dvh flex-col overflow-x-hidden">
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full" viewportClassName="[&>div]:block!">
+            <div className="flex flex-col p-4">{children ? children : <Outlet />}</div>
+          </ScrollArea>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <SidebarProvider
       storageKey="layout-ext-console-sidebar"

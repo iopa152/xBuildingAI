@@ -48,7 +48,10 @@ function filterVisibleMenus(menus: MenuItem[]): MenuItem[] {
 function getVisibleChildren(menu: MenuItem): MenuItem[] {
   if (!menu.children?.length) return [];
   return menu.children.filter(
-    (child) => child.type !== 3 && child.isHidden !== 1 && (child.type === 1 || child.component),
+    (child) =>
+      child.type !== 3 &&
+      child.isHidden !== 1 &&
+      (child.type === 1 || child.component || child.path?.startsWith("apps/")),
   );
 }
 
@@ -63,7 +66,7 @@ function NavMenuItem({ menu, basePath = "" }: { menu: MenuItem; basePath?: strin
     }
   };
   const menuPath = basePath ? `${basePath}/${menu.path}`.replace(/\/+/g, "/") : menu.path;
-  const fullPath = `/console/${menuPath}`.replace(/\/+/g, "/");
+  const fullPath = `/console/${menuPath}`;
   const visibleChildren = getVisibleChildren(menu);
   const isActive = location.pathname.startsWith(fullPath);
 

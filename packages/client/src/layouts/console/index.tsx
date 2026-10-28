@@ -17,6 +17,7 @@ import { Navigate, useLocation, useRoutes } from "react-router-dom";
 import AccessMenuIndexPage from "@/pages/console/access/menu";
 import AccessPermissionIndexPage from "@/pages/console/access/permission";
 import AccessRoleIndexPage from "@/pages/console/access/role";
+import AppIframePage from "@/pages/apps/[identifier]";
 import AgentConfigIndexPage from "@/pages/console/ai/agent/config";
 import AgentIndexPage from "@/pages/console/ai/agent/list";
 import DatasetsConfigPage from "@/pages/console/ai/datasets/config";
@@ -69,7 +70,8 @@ function generateRoutes(menus: MenuItem[]): RouteObject[] {
   return menus
     .filter((menu) => menu.component)
     .flatMap((menu) => {
-      const module = modules[`/src/pages${menu.component}`];
+      const module =
+        modules[`/src/pages${menu.component}`] ?? modules[`/src/pages${menu.component}/index.tsx`];
       const Component = module?.default;
 
       const routes: RouteObject[] = [];
@@ -95,6 +97,7 @@ function ConsoleRoutes() {
   const routes = useMemo<RouteObject[]>(() => {
     const dynamicRoutes = generateRoutes(userInfo?.menus ?? []);
     return [
+      ...dynamicRoutes,
       { path: "/dashboard", element: <DashboardPage /> },
       // TODO: 临时静态页面，完成所有页面之后需要删掉
       { path: "/agent", element: <AgentIndexPage /> },
@@ -104,6 +107,7 @@ function ConsoleRoutes() {
       { path: "/provider", element: <AiProviderIndexPage /> },
       { path: "/mcp", element: <AiMcpIndexPage /> },
       { path: "/extension", element: <ExtensionIndexPage /> },
+      { path: "apps/:identifier/*", element: <AppIframePage /> },
       { path: "/secret", element: <AiSecretIndexPage /> },
       { path: "/operation", element: <OperationIndexPage /> },
       {
@@ -269,7 +273,6 @@ function ConsoleRoutes() {
           },
         ],
       },
-      ...dynamicRoutes,
       { path: "*", element: <NotFoundPage /> },
     ];
   }, [userInfo?.menus]);

@@ -1,395 +1,269 @@
-import { useDashboardQuery } from "@buildingai/services/console";
-import CountUp from "@buildingai/ui/components/effects/count-up";
-import { Avatar, AvatarFallback } from "@buildingai/ui/components/ui/avatar";
-import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
-import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
-import { TrendingDown, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@buildingai/ui/components/ui/button";
+import { Input } from "@buildingai/ui/components/ui/input";
+import { Spinner } from "@buildingai/ui/components/ui/spinner";
+import { cn } from "@buildingai/ui/lib/utils";
+import { useAuthStore } from "@buildingai/stores";
+import { RefreshCw } from "lucide-react";
+import * as React from "react";
 
-import { ProviderAvatar } from "@/components/provider-avatar";
 import { PageContainer } from "@/layouts/console/_components/page-container";
 
-import DataCard from "./_components/data-card";
-import { AreaChartCard } from "./_components/line-chart";
+import { RankingTable, type RankingColumn } from "./_components/ranking-table";
+import {
+  RevenueCompositionChart,
+  type CompositionItem,
+} from "./_components/revenue-composition-chart";
+import { RevenueTrendChart, type RevenueTrendPoint } from "./_components/revenue-trend-chart";
+import { SummaryCard } from "./_components/summary-card";
+import { UserTrendChart, type UserTrendPoint } from "./_components/user-trend-chart";
+
+interface StatsOverview {
+  range: { start_date: string; end_date: string };
+  today: {
+    pay_amount: number;
+    pay_amount_change: number;
+    order_count: number;
+    order_count_change: number;
+    new_users: number;
+    new_users_change: number;
+    active_users: number;
+    active_users_change: number;
+  };
+  summary: {
+    total_pay_amount: number;
+    total_pay_users: number;
+    total_new_users: number;
+    total_coin_consume: number;
+  };
+  revenue_trend: RevenueTrendPoint[];
+  revenue_composition: { by_type: CompositionItem[]; by_channel: CompositionItem[] };
+  user_trend: UserTrendPoint[];
+  rankings: {
+    top_recharge_users: {
+      userId: string;
+      nickname: string;
+      total_amount: number;
+      order_count: number;
+    }[];
+    top_dramas: {
+      dramaId: string;
+      title: string;
+      purchase_count: number;
+      total_coins: number;
+    }[];
+  };
+}
+
+type RechargeUser = StatsOverview["rankings"]["top_recharge_users"][number];
+type DramaRank = StatsOverview["rankings"]["top_dramas"][number];
+
+// drama extension controllers live under /drama/consoleapi/* (extension-level
+// prefix), outside the platform consoleHttpClient's automatic /consoleapi
+// prefix — call them with plain fetch and the session token.
+const API_BASE = import.meta.env.DEV ? "http://localhost:4090" : "";
+
+function dramaFetch<T>(path: string): Promise<T> {
+  const token = useAuthStore.getState().auth.token || "";
+  return fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+    .then((res) => res.json() as Promise<{ code: number; message: string; data: T }>)
+    .then((body) => {
+      if (body.code !== 20000) throw new Error(body.message);
+      return body.data;
+    });
+}
+
+function toDateInput(date: Date) {
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function defaultRange() {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 6);
+  return { start: toDateInput(start), end: toDateInput(end) };
+}
+
+const rechargeColumns: RankingColumn<RechargeUser>[] = [
+  {
+    key: "rank",
+    title: "排名",
+    className: "w-[70px]",
+    render: (_row, index) => <span className="font-bold">{index + 1}</span>,
+  },
+  {
+    key: "nickname",
+    title: "昵称",
+    render: (row) => <span className="block max-w-[260px] truncate">{row.nickname}</span>,
+  },
+  {
+    key: "amount",
+    title: "充值总金额",
+    render: (row) => <span className="font-semibold">{row.total_amount}</span>,
+  },
+  {
+    key: "orders",
+    title: "订单数",
+    render: (row) => row.order_count,
+  },
+];
+
+const dramaColumns: RankingColumn<DramaRank>[] = [
+  {
+    key: "rank",
+    title: "排名",
+    className: "w-[70px]",
+    render: (_row, index) => <span className="font-bold">{index + 1}</span>,
+  },
+  {
+    key: "title",
+    title: "短剧标题",
+    render: (row) => <span className="block max-w-[300px] truncate">{row.title}</span>,
+  },
+  {
+    key: "purchases",
+    title: "购买次数",
+    render: (row) => row.purchase_count,
+  },
+  {
+    key: "coins",
+    title: "金币总额",
+    render: (row) => <span className="font-semibold">{row.total_coins}</span>,
+  },
+];
 
 const DashboardIndexPage = () => {
-  const [userDays, setUserDays] = useState(15);
-  const [revenueDays, setRevenueDays] = useState(15);
-  const [tokenDays] = useState(15);
-  const [tokenRankingType, setTokenRankingType] = useState<"model" | "provider">("model");
+  const [initialRange] = React.useState(defaultRange);
+  const [startDate, setStartDate] = React.useState(initialRange.start);
+  const [endDate, setEndDate] = React.useState(initialRange.end);
+  const [appliedRange, setAppliedRange] = React.useState(initialRange);
 
-  const { data, isLoading } = useDashboardQuery({
-    userDays,
-    revenueDays,
-    tokenDays,
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
+    queryKey: ["drama-dashboard", "overview", appliedRange.start, appliedRange.end],
+    queryFn: () =>
+      dramaFetch<StatsOverview>(
+        `/drama/consoleapi/stats/overview?start_date=${appliedRange.start}&end_date=${appliedRange.end}`,
+      ),
+    refetchInterval: 60_000,
   });
 
-  const handleUserTimeRangeChange = (range: "7d" | "15d" | "30d") => {
-    const days = Number.parseInt(range.replace("d", ""), 10);
-    setUserDays(days);
+  const apply = () => {
+    if (startDate === appliedRange.start && endDate === appliedRange.end) {
+      void refetch();
+    } else {
+      setAppliedRange({ start: startDate, end: endDate });
+    }
   };
 
-  const handleRevenueTimeRangeChange = (range: "7d" | "15d" | "30d") => {
-    const days = Number.parseInt(range.replace("d", ""), 10);
-    setRevenueDays(days);
-  };
+  const today = data?.today;
+  const summary = data?.summary;
+
   return (
     <PageContainer>
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <DataCard
-            title="订单统计"
-            description="订单数据概览"
-            contentClassName="flex flex-col gap-1 px-4 md:gap-2"
-            action={
-              <div className="flex flex-col items-center justify-center">
-                {isLoading ? (
-                  <Skeleton className="h-16 w-20" />
-                ) : (
-                  <>
-                    {(data?.order.orderChange ?? 0) >= 0 ? (
-                      <TrendingUp className="size-8 text-green-600" />
-                    ) : (
-                      <TrendingDown className="text-destructive size-8" />
-                    )}
-                    <div className="text-muted-foreground text-xs">
-                      同比昨天
-                      {(data?.order.orderChange ?? 0) >= 0 ? "增长" : "下降"}
-                      <span
-                        className={`mx-1 text-lg font-bold ${(data?.order.orderChange ?? 0) >= 0 ? "text-green-600" : "text-destructive"}`}
-                      >
-                        {Math.abs(data?.order.orderChange ?? 0).toFixed(1)}%
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-            }
-          >
-            {isLoading ? (
-              <>
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">本月收入</span>
-                  <span className="text-primary text-xl font-bold">
-                    ¥
-                    <CountUp
-                      direction="up"
-                      duration={0.05}
-                      to={data?.order.monthOrderAmount ?? 0}
-                    />
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">订单金额</span>
-                  <span className="text-primary text-xl font-bold">
-                    ¥
-                    <CountUp
-                      direction="up"
-                      duration={0.05}
-                      to={data?.order.todayOrderAmount ?? 0}
-                    />
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">今日订单</span>
-                  <span className="text-primary text-xl font-bold">
-                    <CountUp direction="up" duration={0.05} to={data?.order.ordersToday ?? 0} />
-                  </span>
-                </div>
-              </>
-            )}
-          </DataCard>
-          <DataCard
-            title="用户统计"
-            description="用户数据概览"
-            contentClassName="flex flex-col gap-1 px-4 md:gap-2"
-            action={
-              <div className="flex flex-col items-center justify-center">
-                {isLoading ? (
-                  <Skeleton className="h-16 w-20" />
-                ) : (
-                  <>
-                    {(data?.user.userChange ?? 0) >= 0 ? (
-                      <TrendingUp className="size-8 text-green-600" />
-                    ) : (
-                      <TrendingDown className="text-destructive size-8" />
-                    )}
-                    <div className="text-muted-foreground text-xs">
-                      同比昨天
-                      {(data?.user.userChange ?? 0) >= 0 ? "增长" : "下降"}
-                      <span
-                        className={`mx-1 text-lg font-bold ${(data?.user.userChange ?? 0) >= 0 ? "text-green-600" : "text-destructive"}`}
-                      >
-                        {Math.abs(data?.user.userChange ?? 0).toFixed(1)}%
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-            }
-          >
-            {isLoading ? (
-              <>
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">用户总数</span>
-                  <span className="text-primary text-xl font-bold">
-                    <CountUp direction="up" duration={0.05} to={data?.user.totalUsers ?? 0} />
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">活跃用户</span>
-                  <span className="text-primary text-xl font-bold">
-                    <CountUp direction="up" duration={0.05} to={data?.user.activeUsers ?? 0} />
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">今日新增</span>
-                  <span className="text-primary text-xl font-bold">
-                    <CountUp direction="up" duration={0.05} to={data?.user.newUsersToday ?? 0} />
-                  </span>
-                </div>
-              </>
-            )}
-          </DataCard>
-
-          <DataCard
-            title="对话统计"
-            description="对话数据概览"
-            contentClassName="flex flex-col gap-1 px-4 md:gap-2"
-            action={
-              <div className="flex flex-col items-center justify-center">
-                {isLoading ? (
-                  <Skeleton className="h-16 w-20" />
-                ) : (
-                  <>
-                    {(data?.chat.chatChange ?? 0) >= 0 ? (
-                      <TrendingUp className="size-8 text-blue-600" />
-                    ) : (
-                      <TrendingDown className="text-destructive size-8" />
-                    )}
-                    <div className="text-muted-foreground text-xs">
-                      同比昨天
-                      {(data?.chat.chatChange ?? 0) >= 0 ? "增长" : "下降"}
-                      <span
-                        className={`mx-1 text-lg font-bold ${(data?.chat.chatChange ?? 0) >= 0 ? "text-blue-600" : "text-destructive"}`}
-                      >
-                        {Math.abs(data?.chat.chatChange ?? 0).toFixed(1)}%
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-            }
-          >
-            {isLoading ? (
-              <>
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">对话总数</span>
-                  <span className="text-primary text-xl font-bold">
-                    <CountUp
-                      direction="up"
-                      duration={0.05}
-                      to={data?.chat.totalConversations ?? 0}
-                    />
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Token总数</span>
-                  <span className="text-primary text-xl font-bold">
-                    <CountUp direction="up" duration={0.05} to={data?.chat.totalTokens ?? 0} />
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">今日对话</span>
-                  <span className="text-primary text-xl font-bold">
-                    <CountUp
-                      direction="up"
-                      duration={0.05}
-                      to={data?.chat.conversationsToday ?? 0}
-                    />
-                  </span>
-                </div>
-              </>
-            )}
-          </DataCard>
-        </div>
-
-        <div className="grid min-h-80 grid-cols-1 gap-4 lg:grid-cols-3">
-          <AreaChartCard
-            title="用户趋势"
-            description={`近${userDays}天用户访问与注册趋势`}
-            xAxisKey="date"
-            data={(data?.userDetail.chartData ?? []) as any}
-            series={[
-              { dataKey: "visit", label: "访问数", color: "var(--chart-1)", stackId: "a" },
-              { dataKey: "register", label: "注册数", color: "var(--chart-2)", stackId: "a" },
-            ]}
-            className="lg:col-span-2"
-            onTimeRangeChange={handleUserTimeRangeChange}
+      <div className="space-y-4">
+        <div className="bg-card flex flex-wrap items-center gap-3 rounded-md border px-[15px] py-[15px]">
+          <Input
+            type="date"
+            aria-label="开始日期"
+            className="w-[160px]"
+            value={startDate}
+            max={endDate}
+            onChange={(event) => setStartDate(event.target.value)}
           />
-          <DataCard
-            title="Token使用排行"
-            description={`近${tokenDays}天Token消耗排行`}
-            contentClassName="flex flex-col gap-1 px-0 md:gap-2"
-            action={
-              <Tabs
-                value={tokenRankingType}
-                onValueChange={(value) => setTokenRankingType(value as "model" | "provider")}
-              >
-                <TabsList>
-                  <TabsTrigger value="model">模型</TabsTrigger>
-                  <TabsTrigger value="provider">供应商</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            }
-          >
-            <ScrollArea className="h-[300px] px-4">
-              {isLoading ? (
-                <div className="flex flex-col gap-3">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Skeleton key={index} className="h-14 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <div className="bg-card sticky top-0 z-1 flex items-center gap-2">
-                    <span className="text-muted-foreground min-w-6 text-xs">排名</span>
-                    <span className="text-muted-foreground text-xs">
-                      {tokenRankingType === "model" ? "模型信息" : "供应商信息"}
-                    </span>
-                    <div className="text-muted-foreground ml-auto text-xs">消耗</div>
-                  </div>
-
-                  {tokenRankingType === "model"
-                    ? data?.tokenUsage.byModel.map((item, index) => (
-                        <div className="flex items-center gap-2" key={item.modelId}>
-                          <span className="text-muted-foreground min-w-6">#{index + 1}</span>
-                          <ProviderAvatar
-                            provider={item.provider}
-                            iconUrl={item.iconUrl}
-                            name={item.modelName}
-                            size="sm"
-                          />
-                          <div>
-                            <div>{item.modelName}</div>
-                            <div className="text-muted-foreground text-xs">{item.providerName}</div>
-                          </div>
-                          <div className="ml-auto text-right">
-                            <div>{(item.tokens / 1000).toFixed(1)}k</div>
-                            <div className="text-muted-foreground text-xs">
-                              {item.conversations}次
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    : data?.tokenUsage.byProvider.map((item, index) => (
-                        <div className="flex items-center gap-2" key={item.providerId}>
-                          <span className="text-muted-foreground min-w-6">#{index + 1}</span>
-                          <ProviderAvatar
-                            provider={item.provider}
-                            iconUrl={item.iconUrl}
-                            name={item.providerName}
-                            size="sm"
-                          />
-                          <div>
-                            <div>{item.providerName}</div>
-                            <div className="text-muted-foreground text-xs">{item.provider}</div>
-                          </div>
-                          <div className="ml-auto text-right">
-                            <div>{(item.tokens / 1000).toFixed(1)}k</div>
-                            <div className="text-muted-foreground text-xs">
-                              {item.conversations}次
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                </div>
-              )}
-            </ScrollArea>
-          </DataCard>
-        </div>
-
-        <div className="grid min-h-80 grid-cols-1 gap-4 lg:grid-cols-3">
-          <AreaChartCard
-            title="收入趋势"
-            description={`近${revenueDays}天收入与订单趋势`}
-            xAxisKey="date"
-            data={(data?.revenueDetail.chartData ?? []) as any}
-            series={[
-              { dataKey: "revenue", label: "收入", color: "var(--chart-3)", stackId: "a" },
-              { dataKey: "orders", label: "订单数", color: "var(--chart-4)", stackId: "a" },
-            ]}
-            className="lg:col-span-2"
-            onTimeRangeChange={handleRevenueTimeRangeChange}
+          <span className="text-muted-foreground text-sm">至</span>
+          <Input
+            type="date"
+            aria-label="结束日期"
+            className="w-[160px]"
+            value={endDate}
+            min={startDate}
+            onChange={(event) => setEndDate(event.target.value)}
           />
-          <DataCard
-            title="应用使用排行"
-            description="应用使用次数统计"
-            contentClassName="flex flex-col gap-1 px-0 md:gap-2"
-          >
-            <ScrollArea className="h-[300px] px-4">
-              {isLoading ? (
-                <div className="flex flex-col gap-3">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Skeleton key={index} className="h-14 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <div className="bg-card sticky top-0 z-1 flex items-center gap-2">
-                    <span className="text-muted-foreground min-w-6 text-xs">排名</span>
-                    <span className="text-muted-foreground text-xs">应用信息</span>
-                    <div className="text-muted-foreground ml-auto text-xs">使用次数</div>
-                  </div>
-
-                  {data?.extension.usageRanking && data.extension.usageRanking.length > 0 ? (
-                    data.extension.usageRanking.map((item, index) => (
-                      <div className="flex items-center gap-2" key={item.extensionId}>
-                        <span className="text-muted-foreground min-w-6">#{index + 1}</span>
-                        <Avatar className="rounded-lg">
-                          <AvatarFallback>{item.extensionName.slice(0, 2)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div>{item.extensionName}</div>
-                          <div className="text-muted-foreground text-xs">
-                            应用ID: {item.extensionId}
-                          </div>
-                        </div>
-                        <div className="ml-auto text-right">
-                          <div className="font-bold">{item.usageCount}</div>
-                          <div className="text-muted-foreground text-xs">次</div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-                      暂无应用使用数据
-                    </div>
-                  )}
-                </div>
-              )}
-            </ScrollArea>
-          </DataCard>
+          <Button onClick={apply}>查询</Button>
+          <Button variant="outline" onClick={apply} disabled={isFetching}>
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
+            刷新
+          </Button>
         </div>
+
+        {isError ? (
+          <div className="text-muted-foreground flex flex-col items-center gap-3 py-24 text-sm">
+            <span>数据加载失败：{(error as Error)?.message ?? "未知错误"}</span>
+            <Button variant="outline" onClick={() => void refetch()}>
+              重试
+            </Button>
+          </div>
+        ) : isLoading || !today || !summary || !data ? (
+          <div className="flex items-center justify-center py-40">
+            <Spinner className="size-8" />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-4 min-[1200px]:grid-cols-4">
+              <SummaryCard
+                title="今日充值金额"
+                value={today.pay_amount.toFixed(2)}
+                change={today.pay_amount_change}
+              />
+              <SummaryCard
+                title="今日订单数"
+                value={today.order_count.toLocaleString()}
+                change={today.order_count_change}
+              />
+              <SummaryCard
+                title="今日新增用户"
+                value={today.new_users.toLocaleString()}
+                change={today.new_users_change}
+              />
+              <SummaryCard
+                title="今日活跃用户"
+                value={today.active_users.toLocaleString()}
+                change={today.active_users_change}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 min-[1200px]:grid-cols-4">
+              <SummaryCard title="区间充值金额" value={summary.total_pay_amount.toFixed(2)} />
+              <SummaryCard
+                title="区间付费用户"
+                value={summary.total_pay_users.toLocaleString()}
+              />
+              <SummaryCard title="区间注册用户" value={summary.total_new_users.toLocaleString()} />
+              <SummaryCard
+                title="区间金币消耗"
+                value={summary.total_coin_consume.toLocaleString()}
+              />
+            </div>
+
+            <RevenueTrendChart data={data.revenue_trend} />
+
+            <RevenueCompositionChart
+              byType={data.revenue_composition.by_type}
+              byChannel={data.revenue_composition.by_channel}
+            />
+
+            <UserTrendChart data={data.user_trend} />
+
+            <div className="grid gap-4 min-[1200px]:grid-cols-2">
+              <RankingTable
+                title="充值排行"
+                columns={rechargeColumns}
+                rows={data.rankings.top_recharge_users}
+                getRowKey={(row) => row.userId}
+              />
+              <RankingTable
+                title="热门短剧排行"
+                columns={dramaColumns}
+                rows={data.rankings.top_dramas}
+                getRowKey={(row) => row.dramaId}
+              />
+            </div>
+          </>
+        )}
       </div>
     </PageContainer>
   );

@@ -42,6 +42,17 @@ async function bootstrap() {
 
     const bodyLimit = "5mb";
 
+    // Stripe webhook needs the exact raw bytes for signature verification;
+    // body-parser skips re-parsing when a previous parser already ran.
+    app.use(
+        "/drama/api/pay/webhook/stripe",
+        bodyParser.raw({ type: "*/*", limit: bodyLimit }),
+    );
+    app.use(
+        "/drama/api/airwallex/webhook",
+        bodyParser.raw({ type: "*/*", limit: bodyLimit }),
+    );
+
     app.use(
         bodyParser.json({
             limit: bodyLimit,
