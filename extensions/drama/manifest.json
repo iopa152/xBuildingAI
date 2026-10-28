@@ -1,0 +1,33 @@
+{
+    "identifier": "drama",
+    "name": "海外短剧",
+    "type": "application",
+    "version": "0.4.11",
+    "description": "海外短剧内容管理：剧目、剧集、分类、轮播图",
+    "homepage": "",
+    "author": {
+        "avatar": "/static/avatars/buildingai.png",
+        "name": "hellodrama",
+        "homepage": ""
+    },
+    "changelog": [
+        {
+            "version": "0.4.11",
+            "date": "2026-10-28",
+            "content": "金币充值套餐数据化（后台增删改查 + H5 实时读取）、后台任务进度与签到记录、投放各页搜索/刷新与 LTV 日期区间筛选"
+        },
+        {
+            "version": "0.4.10",
+            "date": "2026-10-27",
+            "content": "投放管理：推广链接支持落地集数、日预算步进与链接复制，列表/点击/CAPI 增加搜索与刷新，LTV 支持日期区间"
+        },
+        {
+            "version": "0.4.9",
+            "date": "2026-10-27",
+            "content": "投放管理：推广链接状态/预算、点击广告归因、CAPI 明细、投放概览/LTV/监控"
+        }
+    ],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    }
+}
