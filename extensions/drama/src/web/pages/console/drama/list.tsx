@@ -24,7 +24,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@buildingai/ui/components/ui/tooltip";
-import { Eye, Flame, Pencil, Plus, Rocket, Star, Trash } from "lucide-react";
+import { Eye, Flame, ListVideo, Pencil, Plus, Rocket, Settings, Star, Trash } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -37,6 +37,9 @@ import {
     usePublishDramaMutation,
     useSetDramaFeaturedMutation,
 } from "../../../services";
+import { BatchSettingsDialog } from "./BatchSettingsDialog";
+import { DramaFormDialog } from "./DramaFormDialog";
+import { PreviewDialog } from "./PreviewDialog";
 
 const statusBadgeMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     draft: { label: "预告中", variant: "secondary" },
@@ -53,6 +56,18 @@ export default function DramaListPage() {
     const [categoryFilter, setCategoryFilter] = useState<string>("all");
     const [page, setPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [batchDrama, setBatchDrama] = useState<{
+        id: string;
+        title: string;
+        episodeCount: number;
+    } | null>(null);
+    const [previewDrama, setPreviewDrama] = useState<{
+        id: string;
+        title: string;
+        coverVertical?: string;
+    } | null>(null);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | undefined>(undefined);
 
     const { data: categories = [] } = useCategoryListQuery();
 
@@ -162,7 +177,12 @@ export default function DramaListPage() {
                         <Trash />
                         批量删除 ({selectedIds.size})
                     </Button>
-                    <Button onClick={() => navigate(`edit`)}>
+                    <Button
+                        onClick={() => {
+                            setEditingId(undefined);
+                            setDialogOpen(true);
+                        }}
+                    >
                         <Plus />
                         新建剧目
                     </Button>
@@ -271,16 +291,72 @@ export default function DramaListPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon-sm"
-                                                                onClick={() =>
-                                                                    navigate(
-                                                                        `edit?id=${drama.id}`,
-                                                                    )
-                                                                }
+                                                                onClick={() => {
+                                                                    setEditingId(drama.id);
+                                                                    setDialogOpen(true);
+                                                                }}
                                                             >
                                                                 <Pencil className="h-4 w-4" />
                                                             </Button>
                                                         </TooltipTrigger>
                                                         <TooltipContent>编辑</TooltipContent>
+                                                    </Tooltip>
+
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon-sm"
+                                                                onClick={() =>
+                                                                    navigate(
+                                                                        `/console/drama/episodes?id=${drama.id}`,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <ListVideo className="h-4 w-4" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>剧集管理</TooltipContent>
+                                                    </Tooltip>
+
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon-sm"
+                                                                onClick={() =>
+                                                                    setPreviewDrama({
+                                                                        id: drama.id,
+                                                                        title: drama.title,
+                                                                        coverVertical:
+                                                                            drama.coverVertical,
+                                                                    })
+                                                                }
+                                                            >
+                                                                <Eye className="h-4 w-4 text-emerald-500" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>预览</TooltipContent>
+                                                    </Tooltip>
+
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon-sm"
+                                                                onClick={() =>
+                                                                    setBatchDrama({
+                                                                        id: drama.id,
+                                                                        title: drama.title,
+                                                                        episodeCount:
+                                                                            drama.episodeCount,
+                                                                    })
+                                                                }
+                                                            >
+                                                                <Settings className="h-4 w-4 text-amber-500" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>批量设置</TooltipContent>
                                                     </Tooltip>
 
                                                     {drama.status !== "published" ? (
@@ -403,6 +479,30 @@ export default function DramaListPage() {
                     </Button>
                 </div>
             </div>
+
+            <DramaFormDialog
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                dramaId={editingId}
+                onSaved={refetch}
+            />
+
+            <BatchSettingsDialog
+                open={!!batchDrama}
+                onOpenChange={(next) => {
+                    if (!next) setBatchDrama(null);
+                }}
+                drama={batchDrama}
+                onApplied={refetch}
+            />
+
+            <PreviewDialog
+                open={!!previewDrama}
+                onOpenChange={(next) => {
+                    if (!next) setPreviewDrama(null);
+                }}
+                drama={previewDrama}
+            />
         </>
     );
 }

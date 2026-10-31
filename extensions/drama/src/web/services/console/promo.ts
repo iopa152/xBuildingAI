@@ -20,6 +20,8 @@ export interface PromoOverviewItem {
     registrations: number;
     registrationRate: number;
     payUsers: number;
+    spend: number;
+    roi: number;
     revenue: number;
     payRate: number;
     avgOrder: number;
@@ -32,6 +34,8 @@ export interface PromoOverviewTotals {
     registrationRate: number;
     payUsers: number;
     revenue: number;
+    spend: number;
+    roi: number;
     payRate: number;
     avgOrder: number;
     arpu: number;
@@ -313,5 +317,14 @@ export function useCapiListQuery(params?: {
                 "/promotion/capi",
                 { params },
             ),
+    });
+}
+
+export function useSetSpendMutation() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (data: { linkId: string; statDate: string; spend: number }) =>
+            consoleHttpClient.put("/promotion/spend", data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["drama-promo"] }),
     });
 }

@@ -314,6 +314,10 @@ export class PromoDaily {
     @Column({ type: "int", default: 0, comment: "金币消耗" })
     coinSpent: number;
 
+    /** manual ad-spend entry for the day (major currency units), used for ROI */
+    @Column({ type: "numeric", precision: 12, scale: 2, default: 0, comment: "广告消耗" })
+    spend: number;
+
     @CreateDateColumn({ comment: "创建时间" })
     createdAt: Date;
 }

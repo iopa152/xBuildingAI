@@ -23,12 +23,6 @@ import {
     TableHeader,
     TableRow,
 } from "@buildingai/ui/components/ui/table";
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "@buildingai/ui/components/ui/tabs";
 import { TimeText } from "@buildingai/ui/components/ui/time-text";
 import { cn } from "@buildingai/ui/lib/utils";
 import { RotateCw, Search } from "lucide-react";
@@ -225,58 +219,51 @@ export default function PromoCapiPage() {
 
                     {detail ? (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                                <DetailItem label="ID" value={detail.id} mono />
-                                <DetailItem label="事件名" value={detail.eventName} mono />
-                                <DetailItem label="事件ID" value={detail.eventId} mono />
-                                <DetailItem
+                            <div className="grid grid-cols-[88px_1fr_88px_1fr] gap-px overflow-hidden rounded-md border bg-border text-sm">
+                                <InfoCell label="ID" value={String(detail.id)} mono />
+                                <InfoCell label="事件名" value={detail.eventName} mono />
+                                <InfoCell label="事件ID" value={detail.eventId} mono />
+                                <InfoCell
                                     label="Pixel ID"
-                                    value={detail.pixelBusinessId ?? detail.pixelId}
+                                    value={detail.pixelBusinessId ?? detail.pixelId ?? "-"}
                                     mono
                                 />
-                                <div className="flex items-center gap-3">
-                                    <span className="text-muted-foreground w-20 shrink-0 text-right">
-                                        状态
-                                    </span>
-                                    {(() => {
+                                <InfoCell
+                                    label="状态"
+                                    value={(() => {
                                         const status = STATUS_META[detail.status] ?? {
                                             label: detail.status,
                                             tone: "gray" as const,
                                         };
                                         return <Pill tone={status.tone}>{status.label}</Pill>;
                                     })()}
-                                </div>
-                                <DetailItem label="响应码" value={detail.responseCode || "-"} />
-                                <DetailItem
+                                />
+                                <InfoCell label="响应码" value={detail.responseCode || "-"} mono />
+                                <InfoCell
                                     label="接收事件数"
                                     value={String(detail.eventsReceived ?? "-")}
                                 />
-                                <DetailItem
+                                <InfoCell
                                     label="重试次数"
                                     value={String(detail.retryCount ?? 0)}
                                 />
-                                <div className="col-span-2 flex gap-3">
-                                    <span className="text-muted-foreground w-20 shrink-0 text-right">
-                                        错误信息
-                                    </span>
-                                    <span className="text-destructive min-w-0 flex-1 break-all">
-                                        {detail.errorMessage || "-"}
-                                    </span>
-                                </div>
+                                <InfoCell
+                                    label="错误信息"
+                                    value={detail.errorMessage || "-"}
+                                    className="col-span-3"
+                                    danger
+                                />
                             </div>
 
-                            <Tabs defaultValue="request">
-                                <TabsList>
-                                    <TabsTrigger value="request">请求数据</TabsTrigger>
-                                    <TabsTrigger value="response">响应内容</TabsTrigger>
-                                </TabsList>
-                                <TabsContent value="request">
-                                    <RawText value={detail.requestBody} />
-                                </TabsContent>
-                                <TabsContent value="response">
-                                    <RawText value={detail.response} />
-                                </TabsContent>
-                            </Tabs>
+                            <div className="space-y-1.5">
+                                <div className="text-sm font-medium">请求数据</div>
+                                <RawText value={detail.requestBody} maxHeight="max-h-64" />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <div className="text-sm font-medium">响应内容</div>
+                                <RawText value={detail.response} maxHeight="max-h-40" />
+                            </div>
                         </div>
                     ) : null}
                 </DialogContent>
@@ -285,29 +272,47 @@ export default function PromoCapiPage() {
     );
 }
 
-function DetailItem({
+function InfoCell({
     label,
     value,
     mono,
+    className,
+    danger,
 }: {
     label: string;
-    value: string;
+    value: React.ReactNode;
     mono?: boolean;
+    className?: string;
+    danger?: boolean;
 }) {
     return (
-        <div className="flex min-w-0 gap-3">
-            <span className="text-muted-foreground w-20 shrink-0 text-right">{label}</span>
-            <span className={mono ? "min-w-0 flex-1 break-all font-mono text-xs" : "min-w-0 flex-1 break-all"}>
+        <>
+            <div className="bg-muted/60 flex items-center px-3 py-2 font-medium">
+                {label}
+            </div>
+            <div
+                className={cn(
+                    "bg-background flex min-w-0 items-center px-3 py-2 break-all",
+                    mono && "font-mono text-xs",
+                    danger && "text-destructive",
+                    className,
+                )}
+            >
                 {value}
-            </span>
-        </div>
+            </div>
+        </>
     );
 }
 
-function RawText({ value }: { value?: string | null }) {
+function RawText({ value, maxHeight }: { value?: string | null; maxHeight?: string }) {
     return (
-        <pre className="bg-muted/40 max-h-64 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap">
-            {value || "暂无数据"}
+        <pre
+            className={cn(
+                "bg-muted/40 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap",
+                maxHeight ?? "max-h-64",
+            )}
+        >
+            {value || "-"}
         </pre>
     );
 }

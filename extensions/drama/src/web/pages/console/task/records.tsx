@@ -16,14 +16,22 @@ import { usePagination } from "@buildingai/ui/hooks/use-pagination";
 import { cn } from "@buildingai/ui/lib/utils";
 import { RotateCw, Search } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useCheckinRecordListQuery, useTaskRecordListQuery } from "../../../services";
 
-export default function TaskRecordsPage() {
-    useDocumentHead({ title: "任务进度" });
+type TaskRecordsPageProps = {
+    defaultTab?: "progress" | "checkin";
+};
+
+export default function TaskRecordsPage({ defaultTab }: TaskRecordsPageProps = {}) {
+    const [searchParams] = useSearchParams();
+    const initialTab =
+        defaultTab ?? (searchParams.get("tab") === "checkin" ? "checkin" : "progress");
+    useDocumentHead({ title: initialTab === "checkin" ? "签到记录" : "任务进度" });
 
     return (
-        <Tabs defaultValue="progress">
+        <Tabs defaultValue={initialTab}>
             <TabsList>
                 <TabsTrigger value="progress">任务进度</TabsTrigger>
                 <TabsTrigger value="checkin">签到记录</TabsTrigger>
@@ -36,6 +44,10 @@ export default function TaskRecordsPage() {
             </TabsContent>
         </Tabs>
     );
+}
+
+export function CheckinRecordsPage() {
+    return <TaskRecordsPage defaultTab="checkin" />;
 }
 
 function TaskProgressTab() {

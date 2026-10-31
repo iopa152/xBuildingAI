@@ -64,6 +64,12 @@ export class DramaLanguage {
     @Column({ type: "varchar", length: 50, comment: "语言名称" })
     name: string;
 
+    @Column({ type: "varchar", length: 50, nullable: true, comment: "原生名称" })
+    nativeName?: string;
+
+    @Column({ type: "varchar", length: 16, nullable: true, comment: "国旗/地区码" })
+    flag?: string;
+
     @Column({ type: "boolean", default: true, comment: "是否启用" })
     status: boolean;
 

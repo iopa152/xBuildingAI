@@ -4,7 +4,13 @@ import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
 
 import { Episode } from "../../../../db/entities/episode.entity";
-import { BatchCreateEpisodesDto, BatchEpisodePriceDto, QueryEpisodeDto, SaveEpisodeDto } from "../../dto";
+import {
+    BatchCreateEpisodesDto,
+    BatchEpisodePriceDto,
+    BatchEpisodeSettingsDto,
+    QueryEpisodeDto,
+    SaveEpisodeDto,
+} from "../../dto";
 import { EpisodeService } from "../../services/episode.service";
 
 /**
@@ -38,6 +44,14 @@ export class EpisodeController extends BaseController {
     @Post("batch-price")
     async batchSetPrice(@Body() dto: BatchEpisodePriceDto) {
         return this.episodeService.batchSetPrice(dto);
+    }
+
+    /**
+     * Batch settings by episode range / condition / all
+     */
+    @Post("batch-settings")
+    async batchSettings(@Body() dto: BatchEpisodeSettingsDto) {
+        return this.episodeService.batchSettings(dto);
     }
 
     @Get()

@@ -40,7 +40,7 @@ import {
 } from "@buildingai/ui/components/ui/table";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { TimeText } from "@buildingai/ui/components/ui/time-text";
-import { Pencil, Plus, RotateCw, Trash, X } from "lucide-react";
+import { Minus, Pencil, Plus, RotateCw, Trash } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -214,8 +214,8 @@ export default function PromoPanelsPage() {
                 type,
                 name: type === "vip" ? "" : "金币数量",
             });
-        } else {
-            setTierForm(tierToForm(tiers[index]));
+        } else if (tiers[index]) {
+            setTierForm(tierToForm(tiers[index]!));
         }
         setTierOpen(true);
     };
@@ -471,11 +471,15 @@ export default function PromoPanelsPage() {
                     if (!open) setEditing(null);
                 }}
             >
-                <DialogContent className="sm:max-w-[800px]" aria-describedby={undefined}>
-                    <DialogHeader>
+                <DialogContent
+                    className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[800px]"
+                    aria-describedby={undefined}
+                >
+                    <DialogHeader className="px-6 pt-5">
                         <DialogTitle>{editing ? "编辑价格面板" : "添加价格面板"}</DialogTitle>
                     </DialogHeader>
 
+                    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
                     <div className="grid grid-cols-[100px_1fr] items-center gap-x-3 gap-y-[18px]">
                         <Label htmlFor="panel-name" className="justify-end gap-1 font-normal">
                             <span className="text-destructive">*</span>
@@ -506,21 +510,25 @@ export default function PromoPanelsPage() {
                         </RadioGroup>
                     </div>
 
-                    <div className="mt-2 flex items-center gap-2 border-t pt-4">
-                        <span className="text-muted-foreground text-sm">档位设置</span>
+                    <div className="flex items-center gap-2">
+                        <span className="bg-border h-px w-4" />
+                        <span className="text-sm font-medium">添加档位</span>
                         <div className="bg-border h-px flex-1" />
+                    </div>
+
+                    <div>
                         <Button size="sm" onClick={() => openTier(null, "vip")}>
                             <Plus />
                             添加档位
                         </Button>
                     </div>
 
-                    <div className="max-h-[46vh] space-y-5 overflow-y-auto pr-1">
+                    <div className="space-y-6">
                         <TierBlock
                             title="会员充值"
                             tiers={vipTiers}
                             badgeText="VIP"
-                            onAdd={() => openTier(null, "vip")}
+                            columns={1}
                             onEdit={(tier) => openTier(tiers.indexOf(tier), "vip")}
                             onRemove={(tier) => removeTier(tiers.indexOf(tier))}
                         />
@@ -528,13 +536,14 @@ export default function PromoPanelsPage() {
                             title="金币充值"
                             tiers={coinTiers}
                             badgeText="金币"
-                            onAdd={() => openTier(null, "coin")}
+                            columns={2}
                             onEdit={(tier) => openTier(tiers.indexOf(tier), "coin")}
                             onRemove={(tier) => removeTier(tiers.indexOf(tier))}
                         />
                     </div>
+                    </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="px-6 pb-5">
                         <Button variant="outline" onClick={() => setFormOpen(false)}>
                             取消
                         </Button>
@@ -546,12 +555,16 @@ export default function PromoPanelsPage() {
             </Dialog>
 
             <Dialog open={tierOpen} onOpenChange={setTierOpen}>
-                <DialogContent className="sm:max-w-[620px]" aria-describedby={undefined}>
-                    <DialogHeader>
+                <DialogContent
+                    className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[620px]"
+                    aria-describedby={undefined}
+                >
+                    <DialogHeader className="px-6 pt-5">
                         <DialogTitle>档位设置</DialogTitle>
                     </DialogHeader>
 
-                    <div className="text-sm font-medium">基本信息</div>
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                    <SectionTitle>基本信息</SectionTitle>
                     <div className="grid grid-cols-[100px_1fr] items-center gap-x-3 gap-y-4">
                         <Label className="justify-end font-normal">充值场景</Label>
                         <Select
@@ -620,12 +633,11 @@ export default function PromoPanelsPage() {
                                 <Label htmlFor="tier-days" className="justify-end font-normal">
                                     会员天数
                                 </Label>
-                                <Input
-                                    id="tier-days"
+                                <Stepper
                                     value={tierForm.days}
-                                    inputMode="numeric"
-                                    onChange={(e) =>
-                                        setTierForm({ ...tierForm, days: e.target.value })
+                                    min={1}
+                                    onChange={(value) =>
+                                        setTierForm({ ...tierForm, days: value })
                                     }
                                 />
                             </>
@@ -703,7 +715,7 @@ export default function PromoPanelsPage() {
                         />
                     </div>
 
-                    <div className="mt-1 text-sm font-medium">展示设置</div>
+                    <SectionTitle>展示设置</SectionTitle>
                     <div className="grid grid-cols-[100px_1fr] items-center gap-x-3 gap-y-4">
                         <Label className="justify-end font-normal">标签</Label>
                         <Select
@@ -727,11 +739,9 @@ export default function PromoPanelsPage() {
                         <Label htmlFor="tier-sort" className="justify-end font-normal">
                             排序
                         </Label>
-                        <Input
-                            id="tier-sort"
+                        <Stepper
                             value={tierForm.sort}
-                            inputMode="numeric"
-                            onChange={(e) => setTierForm({ ...tierForm, sort: e.target.value })}
+                            onChange={(value) => setTierForm({ ...tierForm, sort: value })}
                         />
 
                         <Label htmlFor="tier-desc" className="justify-end font-normal">
@@ -764,8 +774,9 @@ export default function PromoPanelsPage() {
                             <TierRadio id="tier-status-enabled" value="enabled" label="启用" />
                         </RadioGroup>
                     </div>
+                    </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="px-6 pb-5">
                         <Button variant="outline" onClick={() => setTierOpen(false)}>
                             取消
                         </Button>
@@ -794,18 +805,78 @@ export default function PromoPanelsPage() {
     );
 }
 
+const BADGE_STYLES: Record<string, string> = {
+    热门: "bg-red-500 text-white",
+    超值: "bg-emerald-500 text-white",
+    推荐: "bg-blue-500 text-white",
+};
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="flex items-center gap-2">
+            <span className="bg-border h-px w-4" />
+            <span className="text-sm font-medium">{children}</span>
+            <div className="bg-border h-px flex-1" />
+        </div>
+    );
+}
+
+function Stepper({
+    value,
+    onChange,
+    min = 0,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    min?: number;
+}) {
+    const step = (delta: number) => {
+        const parsed = Math.floor(Number(value));
+        const base = Number.isFinite(parsed) && !Number.isNaN(parsed) ? parsed : min;
+        onChange(String(Math.max(min, base + delta)));
+    };
+    return (
+        <div className="border-input flex h-9 w-full items-center overflow-hidden rounded-md border">
+            <button
+                type="button"
+                onClick={() => step(-1)}
+                className="flex h-full w-9 shrink-0 items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+                <Minus className="size-3.5" />
+            </button>
+            <input
+                type="number"
+                value={value}
+                onChange={(e) => {
+                    const parsed = Math.floor(Number(e.target.value));
+                    if (Number.isNaN(parsed) || parsed < min) return;
+                    onChange(String(parsed));
+                }}
+                className="h-full flex-1 border-x bg-transparent text-center text-sm tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <button
+                type="button"
+                onClick={() => step(1)}
+                className="flex h-full w-9 shrink-0 items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+                <Plus className="size-3.5" />
+            </button>
+        </div>
+    );
+}
+
 function TierBlock({
     title,
     tiers,
     badgeText,
-    onAdd,
+    columns,
     onEdit,
     onRemove,
 }: {
     title: string;
     tiers: PricePanelTier[];
     badgeText: string;
-    onAdd: () => void;
+    columns: 1 | 2;
     onEdit: (tier: PricePanelTier) => void;
     onRemove: (tier: PricePanelTier) => void;
 }) {
@@ -815,25 +886,40 @@ function TierBlock({
                 <span className="text-sm font-medium">{title}</span>
                 <span className="text-muted-foreground text-xs">{tiers.length}</span>
                 <div className="bg-border h-px flex-1" />
-                <Button size="sm" variant="outline" onClick={onAdd}>
-                    <Plus />
-                    添加
-                </Button>
             </div>
             {tiers.length === 0 ? (
                 <div className="text-muted-foreground rounded-md border border-dashed py-4 text-center text-xs">
                     暂无档位
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div
+                    className={cn(
+                        "gap-3",
+                        columns === 1 ? "grid grid-cols-1" : "grid grid-cols-2",
+                    )}
+                >
                     {tiers.map((tier, index) => (
                         <div
                             key={`${tier.name}-${index}`}
-                            className="bg-muted/20 relative rounded-md border p-3"
+                            className="relative rounded-lg border p-4"
                         >
-                            <div className="absolute top-2 right-2 flex items-center gap-1">
+                            {tier.badge ? (
+                                <span
+                                    className={cn(
+                                        "absolute top-0 right-0 rounded-bl-lg rounded-tr-lg px-1.5 py-0.5 text-[10px] font-medium",
+                                        BADGE_STYLES[tier.badge] ??
+                                            "bg-primary text-primary-foreground",
+                                    )}
+                                >
+                                    {tier.badge}
+                                </span>
+                            ) : null}
+                            <TierCard tier={tier} badgeText={badgeText} />
+                            <div className="bg-border mt-3 h-px" />
+                            <div className="mt-3 flex items-center justify-center gap-3">
                                 <Button
                                     size="icon-sm"
+                                    className="rounded-full bg-blue-500 text-white hover:bg-blue-600"
                                     aria-label="编辑档位"
                                     onClick={() => onEdit(tier)}
                                 >
@@ -841,15 +927,13 @@ function TierBlock({
                                 </Button>
                                 <Button
                                     size="icon-sm"
-                                    variant="destructive"
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
+                                    className="rounded-full bg-red-500 text-white hover:bg-red-600"
                                     aria-label="删除档位"
                                     onClick={() => onRemove(tier)}
                                 >
-                                    <X />
+                                    <Trash />
                                 </Button>
                             </div>
-                            <TierCard tier={tier} badgeText={badgeText} />
                         </div>
                     ))}
                 </div>
@@ -861,36 +945,34 @@ function TierBlock({
 function TierCard({ tier, badgeText }: { tier: PricePanelTier; badgeText: string }) {
     const isVip = tierType(tier) === "vip";
     return (
-        <div className="space-y-1 pr-14">
-            <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium">{tier.name || (isVip ? "会员" : "金币")}</span>
-                {tier.badge ? (
-                    <span className="bg-primary/10 text-primary rounded px-1 text-[10px]">
-                        {tier.badge}
+        <div className={cn("space-y-1.5", !isVip && "flex flex-col items-center py-1")}>
+            {isVip ? (
+                <div className="text-sm font-semibold">{tier.name || "会员"}</div>
+            ) : (
+                <div className="flex items-start gap-1">
+                    <span className="text-2xl leading-none font-bold text-amber-500">
+                        {(tier.coins ?? 0).toLocaleString()}
                     </span>
-                ) : null}
+                    {tier.bonusCoins ? (
+                        <span className="text-sm font-semibold text-emerald-500">
+                            +{tier.bonusCoins}
+                        </span>
+                    ) : null}
+                </div>
+            )}
+            <div className="flex items-baseline gap-2">
+                <span className={cn("font-bold", isVip && "text-xl")}>
+                    {centsToMoney(tier.price)}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                    PHP {tier.phpPrice ? `₱${(tier.phpPrice / 100).toFixed(2)}` : "-"}
+                </span>
             </div>
             {isVip ? (
-                <>
-                    <div className="text-sm font-semibold">{centsToMoney(tier.price)}</div>
-                    <div className="text-muted-foreground text-xs">
-                        {tier.days ?? 0} 天 · {tier.vipType || "月卡"} · {badgeText}
-                    </div>
-                </>
-            ) : (
-                <>
-                    <div className="text-sm font-semibold">
-                        {(tier.coins ?? 0).toLocaleString()}
-                        {tier.bonusCoins ? (
-                            <span className="text-emerald-600"> +{tier.bonusCoins}</span>
-                        ) : null}
-                    </div>
-                    <div className="text-muted-foreground text-xs">
-                        {centsToMoney(tier.price)}
-                        {tier.phpPrice ? ` · ₱${(tier.phpPrice / 100).toFixed(2)}` : ""}
-                    </div>
-                </>
-            )}
+                <span className="inline-flex w-fit items-center rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                    {badgeText}
+                </span>
+            ) : null}
         </div>
     );
 }
@@ -931,7 +1013,7 @@ function MoneyInput({
                     const number = Number(value);
                     if (Number.isFinite(number)) onChange(number.toFixed(2));
                 }}
-                className="pl-8 text-right tabular-nums"
+                className="pl-8"
             />
         </div>
     );

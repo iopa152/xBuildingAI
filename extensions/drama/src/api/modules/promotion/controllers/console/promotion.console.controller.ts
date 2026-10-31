@@ -1,7 +1,7 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Delete, Get, Param, Patch, Post, Put, Query } from "@nestjs/common";
 
 import {
     CreatePanelDto,
@@ -144,6 +144,14 @@ export class PromotionConsoleController extends BaseController {
     @Post("pixel")
     async createPixel(@Body() dto: CreatePixelDto) {
         return this.promotionService.createPixel(dto);
+    }
+
+    @Put("spend")
+    async setSpend(
+        @Body()
+        dto: { linkId: string; statDate: string; spend: number },
+    ) {
+        return this.promotionService.setSpend(dto.linkId, dto.statDate, Number(dto.spend) || 0);
     }
 
     @Patch("pixel/:id")

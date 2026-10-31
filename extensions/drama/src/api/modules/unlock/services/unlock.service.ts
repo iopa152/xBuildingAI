@@ -8,7 +8,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Drama } from "../../../db/entities/drama.entity";
 import { Episode } from "../../../db/entities/episode.entity";
 import { UnlockRecord, UnlockType } from "../../../db/entities/unlock-record.entity";
-import { UserSubscription } from "@buildingai/db/entities";
+import { User, UserSubscription } from "@buildingai/db/entities";
 
 /**
  * Result of an unlock request
@@ -153,7 +153,52 @@ export class UnlockService extends BaseService<UnlockRecord> {
         }
 
         const [items, total] = await qb.getManyAndCount();
-        return { items, total, page: query.page ?? 1, pageSize: query.pageSize ?? 20 };
+
+        const episodeIds = Array.from(
+            new Set(
+                items
+                    .map((row) => row.episodeId)
+                    .filter((id): id is string => Boolean(id)),
+            ),
+        );
+        const userIds = Array.from(new Set(items.map((row) => row.userId)));
+        const [episodes, users] = await Promise.all([
+            episodeIds.length
+                ? this.episodeRepository.find({
+                      where: { id: In(episodeIds) },
+                      select: ["id", "episodeNo", "coinPrice"],
+                  })
+                : [],
+            userIds.length
+                ? this.dataSource.getRepository(User).find({
+                      where: { id: In(userIds) },
+                      select: ["id", "nickname", "username"],
+                  })
+                : [],
+        ]);
+        const episodeMap = new Map(episodes.map((e) => [e.id, e]));
+        const userMap = new Map(users.map((u) => [u.id, u]));
+
+        return {
+            items: items.map((row) => {
+                const episode = row.episodeId ? episodeMap.get(row.episodeId) : undefined;
+                const user = userMap.get(row.userId);
+                return {
+                    ...row,
+                    dramaTitle: row.drama?.title ?? row.dramaId.slice(0, 8),
+                    episodeNo: episode?.episodeNo ?? null,
+                    originalPrice:
+                        row.type === UnlockType.WHOLE
+                            ? (row.drama?.wholePrice ?? 0)
+                            : (episode?.coinPrice ?? 0),
+                    userNickname:
+                        user?.nickname || user?.username || row.userId.slice(0, 8),
+                };
+            }),
+            total,
+            page: query.page ?? 1,
+            pageSize: query.pageSize ?? 20,
+        };
     }
 
     /**
@@ -163,11 +208,23 @@ export class UnlockService extends BaseService<UnlockRecord> {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const [todayCount] = await this.unlockRepository
+        const totals = await this.unlockRepository
+            .createQueryBuilder("u")
+            .select("COUNT(*)", "total")
+            .addSelect("SUM(u.coins)", "coins")
+            .addSelect(
+                "SUM(CASE WHEN u.type = 'episode' THEN 1 ELSE 0 END)",
+                "episodeOrders",
+            )
+            .addSelect("SUM(CASE WHEN u.type = 'whole' THEN 1 ELSE 0 END)", "wholeOrders")
+            .getRawOne();
+
+        const todayRow = await this.unlockRepository
             .createQueryBuilder("u")
             .select("COUNT(*)", "count")
+            .addSelect("SUM(u.coins)", "coins")
             .where("u.createdAt >= :today", { today })
-            .getRawMany();
+            .getRawOne();
 
         const topDramas = await this.unlockRepository
             .createQueryBuilder("u")
@@ -186,7 +243,13 @@ export class UnlockService extends BaseService<UnlockRecord> {
         const titleMap = new Map(dramas.map((d) => [d.id, d.title]));
 
         return {
-            todayUnlocks: Number(todayCount?.count ?? 0),
+            totalOrders: Number(totals?.total ?? 0),
+            episodeOrders: Number(totals?.episodeOrders ?? 0),
+            wholeOrders: Number(totals?.wholeOrders ?? 0),
+            totalCoins: Number(totals?.coins ?? 0),
+            todayOrders: Number(todayRow?.count ?? 0),
+            todayCoins: Number(todayRow?.coins ?? 0),
+            todayUnlocks: Number(todayRow?.count ?? 0),
             topDramas: topDramas.map((t) => ({
                 dramaId: t.dramaId,
                 title: titleMap.get(t.dramaId) ?? t.dramaId,

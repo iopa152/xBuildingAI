@@ -41,8 +41,12 @@ export class TaskConsoleController extends BaseController {
     }
 
     @Get("record")
-    async listRecords(@Query("taskCode") taskCode?: string, @Query("page") page?: number) {
-        return this.taskService.listRecords({ taskCode, page });
+    async listRecords(
+        @Query("taskCode") taskCode?: string,
+        @Query("page") page?: number,
+        @Query("rewarded") rewarded?: string,
+    ) {
+        return this.taskService.listRecords({ taskCode, page, rewarded });
     }
 
     @Get("checkin")

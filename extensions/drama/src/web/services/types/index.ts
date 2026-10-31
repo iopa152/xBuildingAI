@@ -38,13 +38,20 @@ export type UpdateCategoryParams = Partial<CreateCategoryParams>;
 export interface Drama {
     id: string;
     title: string;
+    subtitle?: string;
     description?: string;
     language: string;
     coverVertical?: string;
     coverHorizontal?: string;
     status: DramaStatus | string;
+    contentType: number;
     complete: boolean;
     featured: boolean;
+    hot: boolean;
+    isNew: boolean;
+    rising: boolean;
+    vipOnly: boolean;
+    exclusive: boolean;
     episodeCount: number;
     wholePrice: number;
     heat: number;
@@ -59,15 +66,25 @@ export interface Drama {
 
 export interface CreateDramaParams {
     title: string;
+    subtitle?: string;
     description?: string;
     language?: string;
     coverVertical?: string;
     coverHorizontal?: string;
     status?: DramaStatus;
+    contentType?: number;
     complete?: boolean;
     featured?: boolean;
+    hot?: boolean;
+    isNew?: boolean;
+    rising?: boolean;
+    vipOnly?: boolean;
+    exclusive?: boolean;
+    episodeCount?: number;
     wholePrice?: number;
     heat?: number;
+    viewCount?: number;
+    likeCount?: number;
     sort?: number;
     categoryIds?: string[];
 }
@@ -94,23 +111,55 @@ export interface Episode {
     dramaId?: string;
     episodeNo: number;
     title?: string;
+    description?: string;
     videoUrl: string;
+    thumbnail?: string;
     duration: number;
+    playCount: number;
+    likeCount: number;
     coinPrice: number;
     isFree: boolean;
+    vipFree: boolean;
     status: string;
+    publishTime?: string | null;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface EpisodeSettingsPayload {
+    isFree?: boolean;
+    coinPrice?: number;
+    vipFree?: boolean;
+    status?: string;
+}
+
+export interface EpisodeRangeRule extends EpisodeSettingsPayload {
+    min: number;
+    max?: number;
+}
+
+export interface BatchEpisodeSettingsParams {
+    dramaId: string;
+    mode: "range" | "filter" | "all";
+    rules?: EpisodeRangeRule[];
+    filters?: string[];
+    settings?: EpisodeSettingsPayload;
 }
 
 export interface SaveEpisodeParams {
     dramaId: string;
     episodeNo: number;
     title?: string;
+    description?: string;
     videoUrl: string;
+    thumbnail?: string;
     duration?: number;
+    playCount?: number;
     coinPrice?: number;
     isFree?: boolean;
+    vipFree?: boolean;
+    status?: string;
+    publishTime?: string | null;
 }
 
 export interface BatchCreateEpisodesParams {

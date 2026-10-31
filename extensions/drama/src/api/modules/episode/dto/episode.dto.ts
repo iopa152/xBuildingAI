@@ -4,6 +4,7 @@ import {
     IsArray,
     IsBoolean,
     IsEnum,
+    IsIn,
     IsInt,
     IsOptional,
     IsString,
@@ -31,7 +32,17 @@ export class SaveEpisodeDto {
 
     @IsString()
     @MaxLength(1000)
+    @IsOptional()
+    description?: string;
+
+    @IsString()
+    @MaxLength(1000)
     videoUrl!: string;
+
+    @IsString()
+    @MaxLength(1000)
+    @IsOptional()
+    thumbnail?: string;
 
     @IsInt()
     @Min(0)
@@ -41,11 +52,24 @@ export class SaveEpisodeDto {
     @IsInt()
     @Min(0)
     @IsOptional()
+    playCount?: number;
+
+    @IsString()
+    @IsOptional()
+    publishTime?: string;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
     coinPrice?: number;
 
     @IsBoolean()
     @IsOptional()
     isFree?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    vipFree?: boolean;
 
     @IsEnum(EpisodeStatus)
     @IsOptional()
@@ -115,6 +139,75 @@ export class BatchEpisodePriceDto {
     @IsInt()
     @Min(0)
     coinPrice!: number;
+}
+
+/**
+ * Setting fields applied by the batch settings tool
+ */
+export class EpisodeSettingsPayloadDto {
+    @IsBoolean()
+    @IsOptional()
+    isFree?: boolean;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    coinPrice?: number;
+
+    @IsBoolean()
+    @IsOptional()
+    vipFree?: boolean;
+
+    @IsEnum(EpisodeStatus)
+    @IsOptional()
+    status?: EpisodeStatus;
+}
+
+/**
+ * One episode-number range rule
+ */
+export class EpisodeRangeRuleDto extends EpisodeSettingsPayloadDto {
+    @IsInt()
+    @Min(1)
+    min!: number;
+
+    /**
+     * Omitted means "to the last episode"
+     */
+    @IsInt()
+    @Min(1)
+    @IsOptional()
+    max?: number;
+}
+
+/**
+ * Batch settings of all episodes of a drama
+ */
+export class BatchEpisodeSettingsDto {
+    @IsUUID("4")
+    dramaId!: string;
+
+    @IsIn(["range", "filter", "all"])
+    mode!: "range" | "filter" | "all";
+
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => EpisodeRangeRuleDto)
+    @IsOptional()
+    rules?: EpisodeRangeRuleDto[];
+
+    /**
+     * noPrice | free | paid | draft | published
+     */
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    filters?: string[];
+
+    @ValidateNested()
+    @Type(() => EpisodeSettingsPayloadDto)
+    @IsOptional()
+    settings?: EpisodeSettingsPayloadDto;
 }
 
 /**

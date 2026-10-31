@@ -52,6 +52,20 @@ async function bootstrap() {
         "/drama/api/airwallex/webhook",
         bodyParser.raw({ type: "*/*", limit: bodyLimit }),
     );
+    app.use(
+        "/drama/api/paymongo/webhook",
+        bodyParser.raw({ type: "*/*", limit: bodyLimit }),
+    );
+
+    // Extension pages must always revalidate: a rebuilt extension changes the
+    // hashed bundle but the page URL stays the same, so cached HTML keeps
+    // loading a deleted bundle (blank page / stale routes).
+    app.use((req, res, next) => {
+        if (req.path.startsWith("/extension/") || req.path.startsWith("/web/extensions/")) {
+            res.setHeader("Cache-Control", "no-cache");
+        }
+        next();
+    });
 
     app.use(
         bodyParser.json({

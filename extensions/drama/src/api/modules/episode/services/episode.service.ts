@@ -6,7 +6,13 @@ import { Injectable } from "@nestjs/common";
 
 import { Drama } from "../../../db/entities/drama.entity";
 import { Episode } from "../../../db/entities/episode.entity";
-import { BatchCreateEpisodesDto, BatchEpisodePriceDto, SaveEpisodeDto } from "../dto";
+import {
+    BatchCreateEpisodesDto,
+    BatchEpisodePriceDto,
+    BatchEpisodeSettingsDto,
+    EpisodeSettingsPayloadDto,
+    SaveEpisodeDto,
+} from "../dto";
 
 /**
  * Episode service (console + web)
@@ -28,14 +34,19 @@ export class EpisodeService extends BaseService<Episode> {
         if (!drama) {
             throw HttpErrorFactory.badRequest("剧目不存在");
         }
+        const { publishTime, ...rest } = dto;
+        const payload: Partial<Episode> = {
+            ...rest,
+            publishTime: publishTime ? new Date(publishTime) : null,
+        };
         const existing = await this.episodeRepository.findOne({
             where: { drama: { id: dto.dramaId }, episodeNo: dto.episodeNo },
         });
         if (existing) {
-            return this.episodeRepository.save({ ...existing, ...dto });
+            return this.episodeRepository.save({ ...existing, ...payload });
         }
         const episode = this.episodeRepository.create({
-            ...dto,
+            ...payload,
             drama,
             status: dto.status ?? "published",
         });
@@ -107,6 +118,100 @@ export class EpisodeService extends BaseService<Episode> {
             { coinPrice: dto.coinPrice },
         );
         return { success: true, message: "批量定价成功" };
+    }
+
+    /**
+     * Batch update episodes by number range, by condition filter or all at once
+     */
+    async batchSettings(dto: BatchEpisodeSettingsDto) {
+        const drama = await this.dramaRepository.findOneBy({ id: dto.dramaId });
+        if (!drama) {
+            throw HttpErrorFactory.badRequest("剧目不存在");
+        }
+        const episodes = await this.episodeRepository.find({
+            where: { drama: { id: dto.dramaId } },
+            order: { episodeNo: "ASC" },
+        });
+
+        let affected = 0;
+        if (dto.mode === "range") {
+            const rules = dto.rules ?? [];
+            if (rules.length === 0) {
+                throw HttpErrorFactory.badRequest("请先添加规则");
+            }
+            for (const rule of rules) {
+                if (rule.max !== undefined && rule.max < rule.min) {
+                    throw HttpErrorFactory.badRequest(
+                        `第 ${rule.min}-${rule.max} 集的集数范围不正确`,
+                    );
+                }
+            }
+            for (const episode of episodes) {
+                const patch: Partial<Episode> = {};
+                for (const rule of rules) {
+                    if (episode.episodeNo < rule.min) continue;
+                    if (rule.max !== undefined && episode.episodeNo > rule.max) continue;
+                    Object.assign(patch, this.buildEpisodePatch(rule));
+                }
+                if (Object.keys(patch).length === 0) continue;
+                await this.episodeRepository.update(episode.id, patch);
+                affected += 1;
+            }
+        } else if (dto.mode === "filter") {
+            const filters = new Set(dto.filters ?? []);
+            if (filters.size === 0) {
+                throw HttpErrorFactory.badRequest("请先选择筛选条件");
+            }
+            const patch = this.buildEpisodePatch(dto.settings ?? {});
+            if (Object.keys(patch).length === 0) {
+                throw HttpErrorFactory.badRequest("请设置批量更新内容");
+            }
+            for (const episode of episodes) {
+                if (!this.matchEpisodeFilters(episode, filters)) continue;
+                await this.episodeRepository.update(episode.id, patch);
+                affected += 1;
+            }
+        } else {
+            const patch = this.buildEpisodePatch(dto.settings ?? {});
+            if (Object.keys(patch).length === 0) {
+                throw HttpErrorFactory.badRequest("请设置批量更新内容");
+            }
+            for (const episode of episodes) {
+                await this.episodeRepository.update(episode.id, patch);
+                affected += 1;
+            }
+        }
+
+        return { success: true, message: `已更新 ${affected} 集`, affected };
+    }
+
+    private buildEpisodePatch(settings: EpisodeSettingsPayloadDto): Partial<Episode> {
+        const patch: Partial<Episode> = {};
+        if (settings.isFree !== undefined) {
+            patch.isFree = settings.isFree;
+            if (settings.isFree) patch.coinPrice = 0;
+        }
+        if (settings.coinPrice !== undefined) {
+            patch.coinPrice = settings.isFree ? 0 : settings.coinPrice;
+        }
+        if (settings.vipFree !== undefined) {
+            patch.vipFree = settings.vipFree;
+        }
+        if (settings.status !== undefined) {
+            patch.status = settings.status;
+        }
+        return patch;
+    }
+
+    private matchEpisodeFilters(episode: Episode, filters: Set<string>): boolean {
+        const matches: Record<string, boolean> = {
+            noPrice: episode.coinPrice === 0 && !episode.isFree,
+            free: episode.isFree,
+            paid: !episode.isFree,
+            draft: episode.status === "draft",
+            published: episode.status === "published",
+        };
+        return [...filters].some((key) => matches[key] === true);
     }
 
     async delete(id: string) {

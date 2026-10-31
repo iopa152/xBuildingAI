@@ -1,5 +1,6 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { cn } from "@buildingai/ui/lib/utils";
+import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Checkbox } from "@buildingai/ui/components/ui/checkbox";
 import {
@@ -73,9 +74,16 @@ interface PixelForm {
     pixelId: string;
     accessToken: string;
     status: boolean;
+    platform: string;
 }
 
-const emptyForm: PixelForm = { name: "", pixelId: "", accessToken: "", status: true };
+const emptyForm: PixelForm = {
+    name: "",
+    pixelId: "",
+    accessToken: "",
+    status: true,
+    platform: "meta",
+};
 
 function StatePill({ active, activeText, inactiveText }: {
     active: boolean;
@@ -109,7 +117,7 @@ export default function PromoPixelsPage() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [jump, setJump] = useState("1");
-    const [sortKey, setSortKey] = useState<SortKey | null>(null);
+    const [sortKey, setSortKey] = useState<SortKey | null>("createdAt");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -206,6 +214,7 @@ export default function PromoPixelsPage() {
             name: pixel.name,
             pixelId: pixel.pixelId,
             accessToken: pixel.accessToken ?? "",
+            platform: (pixel.platform ?? "meta").toLowerCase(),
             status: pixel.status,
         });
         setShowToken(true);
@@ -224,6 +233,7 @@ export default function PromoPixelsPage() {
         const payload = {
             name: form.name.trim(),
             pixelId: form.pixelId.trim(),
+            platform: form.platform,
             accessToken: form.accessToken.trim(),
             status: form.status,
         };
@@ -347,6 +357,7 @@ export default function PromoPixelsPage() {
                                 </TableHead>
                                 <TableHead>名称</TableHead>
                                 <TableHead>像素</TableHead>
+                                <TableHead className="w-20">平台</TableHead>
                                 <TableHead>token</TableHead>
                                 <TableHead>状态</TableHead>
                                 <TableHead>
@@ -363,7 +374,7 @@ export default function PromoPixelsPage() {
                         </TableHeader>
                         <TableBody>
                             {pageRows.length > 0 ? (
-                                pageRows.map((p) => (
+                                pageRows.map((p, idx) => (
                                     <TableRow key={p.id} data-state={selectedIds.has(p.id) ? "selected" : undefined}>
                                         <TableCell>
                                             <Checkbox
@@ -373,16 +384,22 @@ export default function PromoPixelsPage() {
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            <span
-                                                className="text-muted-foreground font-mono text-xs"
-                                                title={p.id}
-                                            >
-                                                {p.id.slice(0, 8)}
+                                            <span className="text-muted-foreground tabular-nums" title={p.id}>
+                                                {sortDir === "desc"
+                                                    ? sorted.length - (currentPage - 1) * pageSize - idx
+                                                    : (currentPage - 1) * pageSize + idx + 1}
                                             </span>
                                         </TableCell>
                                         <TableCell className="font-medium">{p.name}</TableCell>
                                         <TableCell>
                                             <span className="font-mono text-xs">{p.pixelId}</span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={(p.platform ?? "meta") === "tiktok" ? "default" : "secondary"}
+                                            >
+                                                {(p.platform ?? "meta") === "tiktok" ? "TikTok" : "Meta"}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell>
                                             <StatePill
@@ -425,7 +442,7 @@ export default function PromoPixelsPage() {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="h-24 text-center">
+                                    <TableCell colSpan={9} className="h-24 text-center">
                                         {keyword.trim() ? "未找到匹配的像素" : "暂无像素"}
                                     </TableCell>
                                 </TableRow>
@@ -519,6 +536,36 @@ export default function PromoPixelsPage() {
                             </span>
                         </div>
 
+                        <Label className="justify-end font-normal">平台</Label>
+                        <RadioGroup
+                            value={form.platform}
+                            onValueChange={(v) => setForm({ ...form, platform: v })}
+                            className="flex items-center gap-3"
+                        >
+                            <div
+                                className={cn(
+                                    "border-input flex h-8 items-center gap-2 rounded-md border px-2.5 text-sm transition-colors",
+                                    form.platform === "meta" && "border-primary",
+                                )}
+                            >
+                                <RadioGroupItem value="meta" id="pf-meta" />
+                                <Label htmlFor="pf-meta" className="cursor-pointer font-normal">
+                                    Meta
+                                </Label>
+                            </div>
+                            <div
+                                className={cn(
+                                    "border-input flex h-8 items-center gap-2 rounded-md border px-2.5 text-sm transition-colors",
+                                    form.platform === "tiktok" && "border-primary",
+                                )}
+                            >
+                                <RadioGroupItem value="tiktok" id="pf-tiktok" />
+                                <Label htmlFor="pf-tiktok" className="cursor-pointer font-normal">
+                                    TikTok
+                                </Label>
+                            </div>
+                        </RadioGroup>
+
                         <Label htmlFor="pixel-id" className="justify-end gap-1 font-normal">
                             <span className="text-destructive">*</span>
                             像素
@@ -529,7 +576,7 @@ export default function PromoPixelsPage() {
                                 value={form.pixelId}
                                 maxLength={50}
                                 onChange={(e) => setForm({ ...form, pixelId: e.target.value })}
-                                placeholder="请输入像素（Facebook Pixel ID）"
+                                placeholder={form.platform === "tiktok" ? "请输入 TikTok Pixel Code" : "请输入 Facebook Pixel ID"}
                                 className="pr-16"
                             />
                             <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs tabular-nums">
@@ -547,7 +594,11 @@ export default function PromoPixelsPage() {
                                 value={form.accessToken}
                                 maxLength={2000}
                                 onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
-                                placeholder="请输入 token（System User Access Token）"
+                                placeholder={
+                                    form.platform === "tiktok"
+                                        ? "请输入 TikTok Access Token（长效）"
+                                        : "请输入 token（System User Access Token）"
+                                }
                                 className="pr-9"
                             />
                             <button

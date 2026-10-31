@@ -2,7 +2,13 @@ import type { MutationOptionsUtil, QueryOptionsUtil } from "@buildingai/web-type
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
-import type { BatchCreateEpisodesParams, Episode, OperationResult, SaveEpisodeParams } from "../types";
+import type {
+    BatchCreateEpisodesParams,
+    BatchEpisodeSettingsParams,
+    Episode,
+    OperationResult,
+    SaveEpisodeParams,
+} from "../types";
 
 export function useEpisodeListQuery(dramaId: string, options?: QueryOptionsUtil<Episode[]>) {
     return useQuery({
@@ -39,6 +45,16 @@ export function useBatchEpisodePriceMutation(
     return useMutation<OperationResult, Error, { ids: string[]; coinPrice: number }>({
         mutationFn: ({ ids, coinPrice }) =>
             consoleHttpClient.post<OperationResult>("/episode/batch-price", { ids, coinPrice }),
+        ...options,
+    });
+}
+
+export function useBatchEpisodeSettingsMutation(
+    options?: MutationOptionsUtil<OperationResult, BatchEpisodeSettingsParams>,
+) {
+    return useMutation<OperationResult, Error, BatchEpisodeSettingsParams>({
+        mutationFn: (data) =>
+            consoleHttpClient.post<OperationResult>("/episode/batch-settings", data),
         ...options,
     });
 }

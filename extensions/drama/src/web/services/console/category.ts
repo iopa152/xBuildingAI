@@ -10,7 +10,7 @@ import type {
 } from "../types";
 
 export function useCategoryListQuery(
-    params?: { name?: string; language?: string },
+    params?: { name?: string; keyword?: string; language?: string },
     options?: QueryOptionsUtil<DramaCategory[]>,
 ) {
     return useQuery({

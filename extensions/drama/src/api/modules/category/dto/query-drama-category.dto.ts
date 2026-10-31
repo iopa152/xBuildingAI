@@ -12,6 +12,13 @@ export class QueryDramaCategoryDto {
     name?: string;
 
     /**
+     * Fuzzy keyword matched against id / name / code / language
+     */
+    @IsString()
+    @IsOptional()
+    keyword?: string;
+
+    /**
      * Language code
      */
     @IsString()

@@ -247,26 +247,208 @@ export class WatchService extends BaseService<WatchHistory> {
         pageSize?: number;
         dramaId?: string;
         status?: string;
+        keyword?: string;
     }) {
-        const [items, total] = await this.commentRepository.findAndCount({
-            where: {
-                ...(query.dramaId ? { dramaId: query.dramaId } : {}),
-                ...(query.status ? { status: query.status } : {}),
-            },
-            relations: ["drama"],
-            order: { createdAt: "DESC" },
-            skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 20),
-            take: query.pageSize ?? 20,
-        });
-        return { items, total, page: query.page ?? 1, pageSize: query.pageSize ?? 20 };
+        const page = query.page ?? 1;
+        const pageSize = query.pageSize ?? 20;
+        const qb = this.commentRepository
+            .createQueryBuilder("comment")
+            .leftJoinAndSelect("comment.drama", "drama")
+            .leftJoin("comment.user", "user")
+            .addSelect(["user.id", "user.nickname", "user.username", "user.avatar"]);
+
+        if (query.dramaId) {
+            qb.andWhere("comment.dramaId = :dramaId", { dramaId: query.dramaId });
+        }
+        if (query.status) {
+            qb.andWhere("comment.status = :status", { status: query.status });
+        }
+        const kw = query.keyword?.trim();
+        if (kw) {
+            qb.andWhere(
+                "(comment.content ILIKE :kw OR user.nickname ILIKE :kw OR user.username ILIKE :kw OR drama.title ILIKE :kw)",
+                { kw: `%${kw}%` },
+            );
+        }
+
+        const [items, total] = await qb
+            .orderBy("comment.createdAt", "DESC")
+            .skip((page - 1) * pageSize)
+            .take(pageSize)
+            .getManyAndCount();
+
+        const commentIds = items.map((c) => c.id);
+        const episodeIds = Array.from(
+            new Set(items.map((c) => c.episodeId).filter((id): id is string => Boolean(id))),
+        );
+        const [episodes, replies] = await Promise.all([
+            episodeIds.length
+                ? this.episodeRepository.find({
+                      where: { id: In(episodeIds) },
+                      select: ["id", "episodeNo"],
+                  })
+                : [],
+            commentIds.length
+                ? this.commentRepository
+                      .createQueryBuilder("reply")
+                      .select("reply.parentId", "parentId")
+                      .addSelect("COUNT(*)", "count")
+                      .where("reply.parentId IN (:...commentIds)", { commentIds })
+                      .groupBy("reply.parentId")
+                      .getRawMany()
+                : [],
+        ]);
+        const episodeMap = new Map(episodes.map((e) => [e.id, e.episodeNo]));
+        const replyMap = new Map(
+            (replies as { parentId: string; count: string }[]).map((r) => [
+                r.parentId,
+                Number(r.count),
+            ]),
+        );
+
+        return {
+            items: items.map((comment) => ({
+                ...comment,
+                dramaTitle: comment.drama?.title ?? comment.dramaId.slice(0, 8),
+                userNickname:
+                    comment.user?.nickname ||
+                    comment.user?.username ||
+                    comment.userId.slice(0, 8),
+                userAvatar: comment.user?.avatar ?? null,
+                episodeNo: comment.episodeId
+                    ? (episodeMap.get(comment.episodeId) ?? null)
+                    : null,
+                replyCount: replyMap.get(comment.id) ?? 0,
+            })),
+            total,
+            page,
+            pageSize,
+        };
+    }
+
+    async commentStats() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const raw = await this.commentRepository
+            .createQueryBuilder("c")
+            .select("COUNT(*)", "total")
+            .addSelect("SUM(CASE WHEN c.status = 'pending' THEN 1 ELSE 0 END)", "pending")
+            .addSelect("SUM(CASE WHEN c.status = 'approved' THEN 1 ELSE 0 END)", "approved")
+            .addSelect("SUM(CASE WHEN c.status = 'rejected' THEN 1 ELSE 0 END)", "rejected")
+            .addSelect("SUM(CASE WHEN c.createdAt >= :today THEN 1 ELSE 0 END)", "today")
+            .setParameter("today", today)
+            .getRawOne();
+        return {
+            total: Number(raw?.total ?? 0),
+            pending: Number(raw?.pending ?? 0),
+            approved: Number(raw?.approved ?? 0),
+            rejected: Number(raw?.rejected ?? 0),
+            today: Number(raw?.today ?? 0),
+        };
     }
 
     async setCommentStatus(id: string, status: CommentStatus) {
         await this.commentRepository.update({ id }, { status });
     }
 
+    async setCommentsStatus(ids: string[], status: CommentStatus) {
+        if (!ids.length) return;
+        await this.commentRepository.update({ id: In(ids) }, { status });
+    }
+
     async deleteComment(id: string) {
         await this.commentRepository.delete({ id });
+    }
+
+    async deleteComments(ids: string[]) {
+        if (!ids.length) return;
+        await this.commentRepository.delete({ id: In(ids) });
+    }
+
+    async historyStats() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const raw = await this.historyRepository
+            .createQueryBuilder("h")
+            .select("COUNT(*)", "total")
+            .addSelect("COALESCE(SUM(h.progressSeconds), 0)", "seconds")
+            .addSelect(
+                "SUM(CASE WHEN h.duration > 0 AND h.progressSeconds >= h.duration * 0.95 THEN 1 ELSE 0 END)",
+                "completed",
+            )
+            .addSelect("SUM(CASE WHEN h.updatedAt >= :today THEN 1 ELSE 0 END)", "today")
+            .setParameter("today", today)
+            .getRawOne();
+        return {
+            total: Number(raw?.total ?? 0),
+            totalHours: Math.round((Number(raw?.seconds ?? 0) / 3600) * 10) / 10,
+            completed: Number(raw?.completed ?? 0),
+            today: Number(raw?.today ?? 0),
+            topDramas: await this.topDramasBy(this.historyRepository, "h"),
+        };
+    }
+
+    async deleteHistoryRows(ids: string[]) {
+        if (!ids.length) return;
+        await this.historyRepository.delete({ id: In(ids) });
+    }
+
+    async favoriteStats() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const raw = await this.favoriteRepository
+            .createQueryBuilder("f")
+            .select("COUNT(*)", "total")
+            .addSelect("SUM(CASE WHEN f.createdAt >= :today THEN 1 ELSE 0 END)", "today")
+            .setParameter("today", today)
+            .getRawOne();
+        return {
+            total: Number(raw?.total ?? 0),
+            today: Number(raw?.today ?? 0),
+            topDramas: await this.topDramasBy(this.favoriteRepository, "f"),
+        };
+    }
+
+    private async topDramasBy(
+        repository: Repository<{ dramaId: string }>,
+        alias: string,
+    ): Promise<{ dramaId: string; title: string; count: number }[]> {
+        const rows = (await repository
+            .createQueryBuilder(alias)
+            .select(`${alias}.dramaId`, "dramaId")
+            .addSelect("COUNT(*)", "count")
+            .groupBy(`${alias}.dramaId`)
+            .orderBy("count", "DESC")
+            .limit(10)
+            .getRawMany()) as { dramaId: string; count: string }[];
+        if (!rows.length) return [];
+        const dramas = await this.dramaRepository.find({
+            where: { id: In(rows.map((r) => r.dramaId)) },
+            select: ["id", "title"],
+        });
+        const titleMap = new Map(dramas.map((d) => [d.id, d.title]));
+        return rows.map((r) => ({
+            dramaId: r.dramaId,
+            title: titleMap.get(r.dramaId) ?? r.dramaId.slice(0, 8),
+            count: Number(r.count),
+        }));
+    }
+
+    async deleteFavoriteRows(ids: string[]) {
+        if (!ids.length) return;
+        const rows = await this.favoriteRepository.find({
+            where: { id: In(ids) },
+            select: ["id", "dramaId"],
+        });
+        if (!rows.length) return;
+        await this.favoriteRepository.delete({ id: In(ids) });
+        const counts = new Map<string, number>();
+        rows.forEach((row) => counts.set(row.dramaId, (counts.get(row.dramaId) ?? 0) + 1));
+        await Promise.all(
+            Array.from(counts.entries()).map(([dramaId, count]) =>
+                this.dramaRepository.decrement({ id: dramaId }, "favoriteCount", count),
+            ),
+        );
     }
 
     async listRatingsForConsole(query: {
@@ -378,15 +560,24 @@ export class WatchService extends BaseService<WatchHistory> {
     /**
      * Attach drama titles to rows lacking relations (favorites/ratings console lists)
      */
-    async attachDramaTitles<T extends { dramaId: string }>(rows: T[]): Promise<T[]> {
+    async attachDramaTitles<T extends { dramaId: string }>(
+        rows: T[],
+    ): Promise<(T & { dramaTitle: string; dramaCover?: string | null })[]> {
         const ids = Array.from(new Set(rows.map((r) => r.dramaId)));
-        if (!ids.length) return rows;
+        if (!ids.length) return [];
         const dramas = await this.dramaRepository.find({
             where: { id: In(ids) },
-            select: ["id", "title"],
+            select: ["id", "title", "coverVertical"],
         });
-        const map = new Map(dramas.map((d) => [d.id, d.title]));
-        return rows.map((r) => ({ ...r, dramaTitle: map.get(r.dramaId) ?? r.dramaId }));
+        const map = new Map(dramas.map((d) => [d.id, d]));
+        return rows.map((r) => {
+            const drama = map.get(r.dramaId);
+            return {
+                ...r,
+                dramaTitle: drama?.title ?? r.dramaId,
+                dramaCover: drama?.coverVertical ?? null,
+            };
+        });
     }
 
     /**

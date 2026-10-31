@@ -49,14 +49,28 @@ export class OpsConsoleController extends BaseController {
     }
 
     @Post("language")
-    async createLanguage(@Body() dto: { code: string; name: string; sort?: number; status?: boolean }) {
+    async createLanguage(@Body() dto: {
+        code: string;
+        name: string;
+        nativeName?: string;
+        flag?: string;
+        sort?: number;
+        status?: boolean;
+    }) {
         return this.opsService.createLanguage(dto);
     }
 
     @Patch("language/:id")
     async updateLanguage(
         @Param("id", UUIDValidationPipe) id: string,
-        @Body() dto: { name?: string; sort?: number; status?: boolean },
+        @Body() dto: {
+            code?: string;
+            name?: string;
+            nativeName?: string;
+            flag?: string;
+            sort?: number;
+            status?: boolean;
+        },
     ) {
         await this.opsService.updateLanguage(id, dto);
         return { success: true };

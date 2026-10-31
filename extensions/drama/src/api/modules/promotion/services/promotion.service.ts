@@ -3,6 +3,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { In, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable, Logger } from "@nestjs/common";
+import { createHash, randomBytes } from "node:crypto";
 
 import { Drama } from "../../../db/entities/drama.entity";
 import { Episode } from "../../../db/entities/episode.entity";
@@ -18,6 +19,16 @@ import {
 } from "../../../db/entities/promotion-entities.entity";
 
 const H5_BASE = process.env.DRAMA_H5_BASE_URL || "https://dramah5.changqingtch.com";
+
+/** TikTok Events API endpoint (web events, v1.3) */
+const TIKTOK_EVENT_TRACK_URL = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
+/** Meta event name -> TikTok standard web event */
+const TIKTOK_EVENT_MAP: Record<string, string> = {
+    Purchase: "CompletePayment",
+    CompleteRegistration: "CompleteRegistration",
+    ViewContent: "ViewContent",
+};
+
 const EXTENSION_IDENTIFIER = "drama";
 
 const MID_PARAMS = [
@@ -43,6 +54,12 @@ interface ClickMeta {
     fbclid?: string;
     platform?: string;
     isRealAd?: boolean;
+}
+
+interface CapiClientMeta {
+    ip?: string;
+    userAgent?: string;
+    sourceUrl?: string;
 }
 
 /**
@@ -116,7 +133,7 @@ export class PromotionService extends BaseService<PromoLink> {
     /**
      * Bind a registered/logged user to their first promo link (one-shot per user)
      */
-    async attribute(userId: string, code: string) {
+    async attribute(userId: string, code: string, client?: CapiClientMeta) {
         const link = await this.linkRepository.findOneBy({ code, status: "active" });
         if (!link) {
             throw HttpErrorFactory.notFound("推广链接不存在");
@@ -133,7 +150,14 @@ export class PromotionService extends BaseService<PromoLink> {
         await this.bumpDaily(link.id, { registrations: 1 });
 
         // server-side CAPI: CompleteRegistration
-        await this.sendCapiForLink(link.id, "CompleteRegistration", userId).catch(() => undefined);
+        await this.sendCapiForLink(
+            link.id,
+            "CompleteRegistration",
+            userId,
+            undefined,
+            "USD",
+            client,
+        ).catch(() => undefined);
         return { attributed: true };
     }
 
@@ -149,6 +173,7 @@ export class PromotionService extends BaseService<PromoLink> {
         userId?: string,
         value?: number,
         currency = "USD",
+        client?: CapiClientMeta,
     ) {
         const link = await this.linkRepository.findOneBy({ id: linkId });
         if (!link?.pixelId || link.capiEnabled === false) return;
@@ -156,20 +181,31 @@ export class PromotionService extends BaseService<PromoLink> {
         const pixel = await this.pixelRepository.findOneBy({ id: link.pixelId, status: true });
         if (!pixel?.accessToken) return;
 
-        const eventId = `${eventName}:${userId ?? "anon"}:${Date.now()}`;
-        const body = {
-            data: [
-                {
-                    event_name: eventName,
-                    event_time: Math.floor(Date.now() / 1000),
-                    event_id: eventId,
-                    action_source: "website",
-                    ...(userId ? { external_id: userId } : {}),
-                    ...(value !== undefined ? { value, currency } : {}),
-                },
-            ],
-            access_token: pixel.accessToken,
+        const eventId = randomBytes(16).toString("hex");
+        const platform = (pixel.platform ?? "meta").toLowerCase();
+        const tiktokEvent = TIKTOK_EVENT_MAP[eventName] ?? eventName;
+        const userData: Record<string, unknown> = {};
+        if (userId) {
+            userData.external_id = [createHash("sha256").update(userId).digest("hex")];
+        }
+        if (client?.ip) userData.client_ip_address = client.ip;
+        if (client?.userAgent) userData.client_user_agent = client.userAgent;
+
+        const sourceUrl =
+            client?.sourceUrl ||
+            (link.dramaId ? `${H5_BASE}${this.landingForDrama(link.dramaId, link.episodeId)}` : undefined);
+
+        // Meta CAPI payload; access_token is sent but never logged
+        const payload = {
+            event_id: eventId,
+            ...(Object.keys(userData).length > 0 ? { user_data: userData } : {}),
+            event_name: eventName,
+            event_time: Math.floor(Date.now() / 1000),
+            custom_data: value !== undefined ? { value, currency } : [],
+            action_source: "website",
+            ...(sourceUrl ? { event_source_url: sourceUrl } : {}),
         };
+        const body = { data: [payload], access_token: pixel.accessToken };
         const event = this.capiRepository.create({
             pixelId: pixel.id,
             linkId,
@@ -179,7 +215,7 @@ export class PromotionService extends BaseService<PromoLink> {
             value,
             currency,
             status: "pending",
-            requestBody: JSON.stringify(body, null, 2),
+            requestBody: JSON.stringify({ data: [payload] }, null, 2),
         });
         try {
             await this.capiRepository.insert(event);
@@ -189,34 +225,93 @@ export class PromotionService extends BaseService<PromoLink> {
         }
 
         try {
-            const response = await fetch(
-                `https://graph.facebook.com/v18.0/${pixel.pixelId}/events`,
-                {
+            let response: Response;
+            let failed: boolean;
+            let eventsReceived = 0;
+            let errorMessage: string | undefined;
+
+            if (platform === "tiktok") {
+                // TikTok Events API v1.3 (pixel.code + Access-Token header)
+                response = await fetch(TIKTOK_EVENT_TRACK_URL, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(body),
-                },
-            );
-            const text = await response.text();
-            let parsed: {
-                events_received?: number;
-                error?: { message?: string };
-            } | null = null;
-            try {
-                parsed = JSON.parse(text);
-            } catch {
-                parsed = null;
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Token": pixel.accessToken,
+                    },
+                    body: JSON.stringify({
+                        event_source: "web",
+                        event_source_id: pixel.pixelId,
+                        data: [
+                            {
+                                event: tiktokEvent,
+                                event_time: Math.floor(Date.now() / 1000),
+                                event_id: eventId,
+                                user: {
+                                    ...(userId
+                                        ? {
+                                              external_id: createHash("sha256")
+                                                  .update(userId)
+                                                  .digest("hex"),
+                                          }
+                                        : {}),
+                                    ...(client?.ip ? { ip: client.ip } : {}),
+                                    ...(client?.userAgent
+                                        ? { user_agent: client.userAgent }
+                                        : {}),
+                                },
+                                properties: {
+                                    ...(value !== undefined
+                                        ? { currency: (currency || "USD").toUpperCase(), value }
+                                        : {}),
+                                    ...(sourceUrl ? { page_url: sourceUrl } : {}),
+                                },
+                                page: { url: sourceUrl ?? H5_BASE },
+                            },
+                        ],
+                    }),
+                });
+                const text = await response.text();
+                let parsed: { code?: number; message?: string } | null = null;
+                try {
+                    parsed = JSON.parse(text);
+                } catch {
+                    parsed = null;
+                }
+                failed = !response.ok || (parsed?.code !== undefined && parsed.code !== 0);
+                errorMessage = failed ? (parsed?.message ?? text.slice(0, 1000)) : undefined;
+            } else {
+                // Meta Graph API v18
+                response = await fetch(
+                    `https://graph.facebook.com/v18.0/${pixel.pixelId}/events`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(body),
+                    },
+                );
+                const text = await response.text();
+                let parsed: {
+                    events_received?: number;
+                    error?: { message?: string };
+                } | null = null;
+                try {
+                    parsed = JSON.parse(text);
+                } catch {
+                    parsed = null;
+                }
+                failed = !response.ok || !!parsed?.error;
+                eventsReceived = Number(parsed?.events_received ?? 0) || 0;
+                errorMessage =
+                    parsed?.error?.message ?? (failed ? text.slice(0, 1000) : undefined);
             }
-            const failed = !response.ok || !!parsed?.error;
+
             await this.capiRepository.update(
                 { id: event.id },
                 {
                     status: failed ? "failed" : "sent",
-                    response: text.slice(0, 4000),
                     responseCode: String(response.status),
-                    eventsReceived: Number(parsed?.events_received ?? 0) || 0,
-                    errorMessage:
-                        parsed?.error?.message ?? (failed ? text.slice(0, 1000) : undefined),
+                    eventsReceived,
+                    errorMessage,
                 },
             );
         } catch (err) {
@@ -242,10 +337,11 @@ export class PromotionService extends BaseService<PromoLink> {
         userId?: string,
         value?: number,
         currency = "USD",
+        client?: CapiClientMeta,
     ) {
         const link = await this.linkRepository.findOneBy({ code, status: "active" });
         if (!link) return;
-        return this.sendCapiForLink(link.id, eventName, userId, value, currency);
+        return this.sendCapiForLink(link.id, eventName, userId, value, currency, client);
     }
 
     // ---------------- dashboard / LTV ----------------
@@ -325,6 +421,7 @@ export class PromotionService extends BaseService<PromoLink> {
                 clicks: number;
                 registrations: number;
                 revenueCents: number;
+                spendCents: number;
                 payers: Set<string>;
             }
         >();
@@ -348,6 +445,7 @@ export class PromotionService extends BaseService<PromoLink> {
                     clicks: 0,
                     registrations: 0,
                     revenueCents: 0,
+                    spendCents: 0,
                     payers: new Set(),
                 };
                 buckets.set(key, entry);
@@ -360,6 +458,7 @@ export class PromotionService extends BaseService<PromoLink> {
             const bucket = bucketFor(keyOf(row.linkId, row.statDate), row.statDate);
             bucket.clicks += row.clicks;
             bucket.registrations += row.registrations;
+            bucket.spendCents += Math.round(Number(row.spend ?? 0) * 100);
         }
 
         const orders = await this.getPaidOrders(
@@ -379,6 +478,7 @@ export class PromotionService extends BaseService<PromoLink> {
         const items = Array.from(buckets.values())
             .map((b) => {
                 const revenue = +(b.revenueCents / 100).toFixed(2);
+                const spend = +(b.spendCents / 100).toFixed(2);
                 return {
                     key: b.key,
                     label: b.label,
@@ -387,6 +487,8 @@ export class PromotionService extends BaseService<PromoLink> {
                     registrations: b.registrations,
                     registrationRate: b.clicks ? +(b.registrations / b.clicks).toFixed(4) : 0,
                     payUsers: b.payers.size,
+                    spend,
+                    roi: spend > 0 ? +(revenue / spend).toFixed(4) : 0,
                     revenue,
                     payRate: b.registrations ? +(b.payers.size / b.registrations).toFixed(4) : 0,
                     avgOrder: b.payers.size ? +(revenue / b.payers.size).toFixed(2) : 0,
@@ -405,9 +507,11 @@ export class PromotionService extends BaseService<PromoLink> {
                 registrations: acc.registrations + item.registrations,
                 payUsers: acc.payUsers + item.payUsers,
                 revenue: +(acc.revenue + item.revenue).toFixed(2),
+                spend: +(acc.spend + item.spend).toFixed(2),
             }),
-            { clicks: 0, registrations: 0, payUsers: 0, revenue: 0 },
+            { clicks: 0, registrations: 0, payUsers: 0, revenue: 0, spend: 0 },
         );
+        totals.roi = totals.spend > 0 ? +(totals.revenue / totals.spend).toFixed(4) : 0;
         const totalRates = {
             ...totals,
             registrationRate: totals.clicks
@@ -437,6 +541,32 @@ export class PromotionService extends BaseService<PromoLink> {
             creators,
             dramas: dramaOptions,
         };
+    }
+
+    /**
+     * Manual ad-spend entry for one link/day (upsert into promo_daily).
+     */
+    async setSpend(linkId: string, statDate: string, spend: number) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(statDate)) {
+            throw HttpErrorFactory.badRequest("日期格式应为 YYYY-MM-DD");
+        }
+        if (spend < 0) throw HttpErrorFactory.badRequest("消耗不能为负数");
+        const link = await this.linkRepository.findOneBy({ id: linkId });
+        if (!link) throw HttpErrorFactory.notFound("推广链接不存在");
+
+        const existing = await this.dailyRepository.findOneBy({ linkId, statDate });
+        if (existing) {
+            await this.dailyRepository.update({ id: existing.id }, { spend: spend.toFixed(2) });
+        } else {
+            await this.dailyRepository.insert(
+                this.dailyRepository.create({
+                    linkId,
+                    statDate,
+                    spend: spend.toFixed(2),
+                } as Partial<PromoDaily>),
+            );
+        }
+        return { success: true, linkId, statDate, spend };
     }
 
     /**

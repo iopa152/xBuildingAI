@@ -77,9 +77,36 @@ export class HelpConsoleController extends BaseController {
     @Get("withdrawal")
     async withdrawals(
         @Query("status") status?: string,
+        @Query("keyword") keyword?: string,
+        @Query("minCoins") minCoins?: string,
+        @Query("maxCoins") maxCoins?: string,
+        @Query("currency") currency?: string,
+        @Query("payee") payee?: string,
+        @Query("bankCountry") bankCountry?: string,
+        @Query("bank") bank?: string,
+        @Query("applyFrom") applyFrom?: string,
+        @Query("applyTo") applyTo?: string,
+        @Query("reviewedFrom") reviewedFrom?: string,
+        @Query("reviewedTo") reviewedTo?: string,
         @Query("page") page?: number,
+        @Query("pageSize") pageSize?: number,
     ) {
-        return this.helpService.listWithdrawalsForConsole({ status, page });
+        return this.helpService.listWithdrawalsForConsole({
+            status,
+            keyword,
+            minCoins: minCoins ? Number(minCoins) : undefined,
+            maxCoins: maxCoins ? Number(maxCoins) : undefined,
+            currency,
+            payee,
+            bankCountry,
+            bank,
+            applyFrom,
+            applyTo,
+            reviewedFrom,
+            reviewedTo,
+            page,
+            pageSize,
+        });
     }
 
     @Post("withdrawal/:id/approve")

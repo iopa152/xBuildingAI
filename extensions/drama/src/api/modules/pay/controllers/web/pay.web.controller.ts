@@ -7,6 +7,7 @@ import { Body, Get, Headers, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 
 import { CreateCoinOrderDto } from "../../dto";
+import { PaymongoService } from "../../services/paymongo.service";
 import { PayService } from "../../services/pay.service";
 
 /**
@@ -14,7 +15,10 @@ import { PayService } from "../../services/pay.service";
  */
 @ExtensionWebController("pay")
 export class PayWebController extends BaseController {
-    constructor(private readonly payService: PayService) {
+    constructor(
+        private readonly payService: PayService,
+        private readonly paymongoService: PaymongoService,
+    ) {
         super();
     }
 
@@ -45,6 +49,9 @@ export class PayWebController extends BaseController {
      */
     @Post("order")
     async createOrder(@Playground() user: UserPlayground, @Body() dto: CreateCoinOrderDto) {
+        if (dto.channel === "paymongo") {
+            return this.paymongoService.createOrder(user.id, dto);
+        }
         return this.payService.createOrder(user.id, dto);
     }
 
@@ -69,5 +76,35 @@ export class PayWebController extends BaseController {
         @Query("page") page = 1,
     ) {
         return this.payService.myOrders(user.id, Number(page));
+    }
+
+    /**
+     * VIP packages for the H5 VIP page
+     */
+    @Get("vip-packages")
+    @Public()
+    async vipPackages() {
+        const rows = await this.payService.listVipPackages();
+        return rows
+            .filter((r) => r.enabled)
+            .map((r) => ({
+                id: r.id,
+                name: r.name,
+                durationType: r.durationType,
+                days: r.days,
+                price: r.price,
+                originalPrice: r.originalPrice,
+                phpPrice: r.phpPrice,
+                tag: r.tag ?? "",
+                autoRenew: r.autoRenew,
+            }));
+    }
+
+    /**
+     * Redeem a code (coin / vip reward)
+     */
+    @Post("redeem")
+    async redeem(@Playground() user: UserPlayground, @Body("code") code: string) {
+        return this.payService.redeem(user.id, code ?? "");
     }
 }

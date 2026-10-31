@@ -1,6 +1,6 @@
 import { BaseService } from "@buildingai/base";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { DataSource, Repository } from "@buildingai/db/typeorm";
+import { DataSource, IsNull, Not, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { ExtensionBillingService } from "@buildingai/extension-sdk";
 import { OpsService } from "../../ops/services/ops.service";
@@ -277,9 +277,17 @@ export class TaskService extends BaseService<TaskConfig> {
         await this.taskConfigRepository.delete({ id });
     }
 
-    async listRecords(query: { page?: number; pageSize?: number; taskCode?: string }) {
+    async listRecords(query: {
+        page?: number;
+        pageSize?: number;
+        taskCode?: string;
+        rewarded?: string;
+    }) {
         const [items, total] = await this.taskRecordRepository.findAndCount({
-            where: query.taskCode ? { taskCode: query.taskCode } : {},
+            where: {
+                ...(query.taskCode ? { taskCode: query.taskCode } : {}),
+                ...(query.rewarded === "true" ? { rewardedAt: Not(IsNull()) } : {}),
+            },
             order: { createdAt: "DESC" },
             skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 20),
             take: query.pageSize ?? 20,

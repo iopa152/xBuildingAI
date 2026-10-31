@@ -761,16 +761,20 @@ export default function PromoLinksPage() {
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>
-                            删除{deleteTargets.length > 1 ? ` ${deleteTargets.length} 个` : ""}推广链接
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>确定删除选中记录?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            删除后不可恢复，历史点击与回传记录将保留。确认删除吗？
+                            即将删除{deleteTargets.length > 1 ? ` ${deleteTargets.length} 个` : ""}
+                            推广链接，删除后不可恢复，历史点击与回传记录将保留。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>取消</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmDelete}>删除</AlertDialogAction>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={confirmDelete}
+                        >
+                            确定
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

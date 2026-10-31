@@ -1,4 +1,6 @@
 import { useDocumentHead } from "@buildingai/hooks";
+import { cn } from "@buildingai/ui/lib/utils";
+import { Button } from "@buildingai/ui/components/ui/button";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Spinner } from "@buildingai/ui/components/ui/spinner";
 import {
@@ -10,36 +12,42 @@ import {
     TableRow,
 } from "@buildingai/ui/components/ui/table";
 import { TimeText } from "@buildingai/ui/components/ui/time-text";
-import { usePagination } from "@buildingai/ui/hooks/use-pagination";
-import { Search, Star } from "lucide-react";
+import { RotateCw, Search, Star } from "lucide-react";
 import { useState } from "react";
 
-import { resolveAssetUrl, useRatingListQuery } from "../../../services";
+import { useRatingListQuery } from "../../../services";
+import { Pager } from "../promo/shared";
+import { DramaCell, UserCell } from "./shared";
 
 export default function RatingManagePage() {
-    useDocumentHead({ title: "评分管理" });
+    useDocumentHead({ title: "评分记录" });
+
     const [keyword, setKeyword] = useState("");
     const [page, setPage] = useState(1);
-    const pageSize = 20;
+    const [pageSize, setPageSize] = useState(10);
 
-    const { data, isLoading } = useRatingListQuery({
+    const { data, isLoading, isFetching, refetch } = useRatingListQuery({
         page,
         pageSize,
         keyword: keyword.trim() || undefined,
     });
-    const { PaginationComponent } = usePagination({
-        total: data?.total ?? 0,
-        pageSize,
-        page,
-        onPageChange: setPage,
-    });
 
     const items = data?.items ?? [];
+    const total = data?.total ?? 0;
 
     return (
         <>
-            <div className="mb-4 flex items-center gap-3">
-                <div className="relative max-w-xs flex-1">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+                <Button
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label="刷新"
+                    disabled={isFetching}
+                    onClick={() => refetch()}
+                >
+                    <RotateCw className={cn(isFetching && "animate-spin")} />
+                </Button>
+                <div className="relative ml-auto w-full max-w-xs">
                     <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <Input
                         value={keyword}
@@ -47,52 +55,48 @@ export default function RatingManagePage() {
                             setKeyword(e.target.value);
                             setPage(1);
                         }}
-                        placeholder="搜索用户昵称或剧名..."
+                        placeholder="搜索用户昵称或短剧标题"
                         className="pl-9"
                     />
                 </div>
             </div>
 
             {isLoading ? (
-                <div className="flex flex-1 items-center justify-center py-20">
+                <div className="flex items-center justify-center py-20">
                     <Spinner className="size-8" />
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-md border">
+                <div className="overflow-x-auto rounded-md border">
                     <Table>
                         <TableHeader className="bg-muted">
                             <TableRow>
-                                <TableHead>用户</TableHead>
-                                <TableHead>剧目</TableHead>
-                                <TableHead>评分</TableHead>
-                                <TableHead>时间</TableHead>
+                                <TableHead className="w-14">ID</TableHead>
+                                <TableHead className="min-w-32">用户</TableHead>
+                                <TableHead className="min-w-48">短剧</TableHead>
+                                <TableHead className="min-w-36">评分</TableHead>
+                                <TableHead className="min-w-36">评分时间</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {items.length > 0 ? (
-                                items.map((r) => (
+                                items.map((r, idx) => (
                                     <TableRow key={r.id}>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                {r.userAvatar && (
-                                                    <img
-                                                        src={resolveAssetUrl(r.userAvatar)}
-                                                        alt=""
-                                                        className="size-7 rounded-full object-cover"
-                                                    />
-                                                )}
-                                                <div>
-                                                    <p className="text-sm font-medium">
-                                                        {r.userNickname ?? r.userId.slice(0, 8)}
-                                                    </p>
-                                                    <p className="text-muted-foreground text-xs">
-                                                        {r.userId.slice(0, 8)}
-                                                    </p>
-                                                </div>
-                                            </div>
+                                        <TableCell className="text-muted-foreground tabular-nums">
+                                            {total - (page - 1) * pageSize - idx}
                                         </TableCell>
                                         <TableCell>
-                                            <span className="font-medium">{r.dramaTitle}</span>
+                                            <UserCell
+                                                nickname={r.userNickname}
+                                                avatar={r.userAvatar}
+                                                userId={r.userId}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <DramaCell
+                                                cover={r.dramaCover}
+                                                title={r.dramaTitle}
+                                                id={r.dramaId}
+                                            />
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-0.5">
@@ -106,19 +110,22 @@ export default function RatingManagePage() {
                                                         }
                                                     />
                                                 ))}
-                                                <span className="text-muted-foreground ml-1 text-xs">
+                                                <span className="text-muted-foreground ml-1 text-xs tabular-nums">
                                                     {r.stars}.0
                                                 </span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <TimeText value={r.createdAt} format="YYYY/MM/DD HH:mm" />
+                                            <TimeText
+                                                value={r.createdAt}
+                                                format="YYYY-MM-DD HH:mm:ss"
+                                            />
                                         </TableCell>
                                     </TableRow>
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
+                                    <TableCell colSpan={5} className="h-24 text-center">
                                         暂无数据
                                     </TableCell>
                                 </TableRow>
@@ -128,9 +135,13 @@ export default function RatingManagePage() {
                 </div>
             )}
 
-            <div className="mt-4">
-                <PaginationComponent className="mx-0 w-fit" />
-            </div>
+            <Pager
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPage={setPage}
+                onPageSize={setPageSize}
+            />
         </>
     );
 }

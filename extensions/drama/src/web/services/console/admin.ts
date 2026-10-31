@@ -114,8 +114,12 @@ export interface LanguageRow {
     id: string;
     code: string;
     name: string;
+    nativeName?: string | null;
+    flag?: string | null;
     status: boolean;
     sort: number;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export function useLanguageListQuery() {
@@ -125,10 +129,19 @@ export function useLanguageListQuery() {
     });
 }
 
+export interface LanguagePayload {
+    code?: string;
+    name: string;
+    nativeName?: string;
+    flag?: string;
+    sort?: number;
+    status?: boolean;
+}
+
 export function useSaveLanguageMutation() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, data }: { id?: string; data: { code?: string; name: string; sort?: number; status?: boolean } }) =>
+        mutationFn: ({ id, data }: { id?: string; data: LanguagePayload }) =>
             id ? consoleHttpClient.patch(`/ops/language/${id}`, data) : consoleHttpClient.post("/ops/language", data),
         onSuccess: () => qc.invalidateQueries({ queryKey: ["drama-ops"] }),
     });

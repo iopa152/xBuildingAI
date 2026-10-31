@@ -22,9 +22,11 @@ import {
     useAwxConfigQuery,
     useCoinOrderListQuery,
     usePayConfigQuery,
+    usePaymongoConfigQuery,
     useRefundMutation,
     useSaveAwxConfigMutation,
     useSavePayConfigMutation,
+    useSavePaymongoConfigMutation,
     useSaveVodConfigMutation,
     useVodConfigQuery,
 } from "../../../services";
@@ -38,6 +40,9 @@ export default function PayConfigPage() {
     const refund = useRefundMutation();
     const awxConfig = useAwxConfigQuery();
     const saveAwx = useSaveAwxConfigMutation();
+    const paymongoConfig = usePaymongoConfigQuery();
+    const savePaymongo = useSavePaymongoConfigMutation();
+    const [paymongo, setPaymongo] = useState({ secretKey: "", webhookSecret: "", enabled: false });
     const vodConfig = useVodConfigQuery();
     const saveVod = useSaveVodConfigMutation();
     const [awx, setAwx] = useState({ clientId: "", apiKey: "", webhookSecret: "", enabled: false });
@@ -70,6 +75,16 @@ export default function PayConfigPage() {
         await saveAwx.mutateAsync(payload);
         toast.success("Airwallex 已保存");
         setAwx((f) => ({ ...f, clientId: "", apiKey: "", webhookSecret: "" }));
+    };
+
+    const handleSavePaymongo = async () => {
+        const payload: Record<string, unknown> = { enabled: paymongo.enabled };
+        if (paymongo.secretKey.trim().length > 8) payload.secretKey = paymongo.secretKey.trim();
+        if (paymongo.webhookSecret.trim().length > 6)
+            payload.webhookSecret = paymongo.webhookSecret.trim();
+        await savePaymongo.mutateAsync(payload);
+        toast.success("PayMongo 已保存");
+        setPaymongo((f) => ({ ...f, secretKey: "", webhookSecret: "" }));
     };
 
     const handleSaveVod = async () => {
@@ -210,6 +225,56 @@ export default function PayConfigPage() {
                     <p className="text-muted-foreground md:col-span-2 text-xs">
                         Webhook 地址：
                         <code className="bg-muted rounded px-1">https://你的域名/drama/api/airwallex/webhook</code>
+                    </p>
+                </CardContent>
+            </Card>
+
+            <Card className="mb-6">
+                <CardContent className="grid gap-4 pt-6 md:grid-cols-2">
+                    <div className="mb-2 font-semibold md:col-span-2">
+                        PayMongo 通道（菲律宾 GCash / Maya）
+                        {paymongoConfig.data?.secretKeyMasked && (
+                            <span className="text-muted-foreground ml-2 text-xs">
+                                当前 {paymongoConfig.data.secretKeyMasked}
+                            </span>
+                        )}
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Secret Key</Label>
+                        <Input
+                            value={paymongo.secretKey}
+                            onChange={(e) => setPaymongo({ ...paymongo, secretKey: e.target.value })}
+                            placeholder="sk_test_... / sk_live_..."
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>
+                            Webhook Signing Secret{" "}
+                            {paymongoConfig.data?.webhookSecretMasked && (
+                                <span className="text-muted-foreground text-xs">
+                                    （当前 {paymongoConfig.data.webhookSecretMasked}）
+                                </span>
+                            )}
+                        </Label>
+                        <Input
+                            value={paymongo.webhookSecret}
+                            onChange={(e) => setPaymongo({ ...paymongo, webhookSecret: e.target.value })}
+                            placeholder="wh_..."
+                        />
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Switch
+                            checked={paymongo.enabled}
+                            onCheckedChange={(v) => setPaymongo({ ...paymongo, enabled: v })}
+                        />
+                        <Label>启用 PayMongo 通道</Label>
+                        <Button className="ml-auto" size="sm" onClick={handleSavePaymongo} loading={savePaymongo.isPending}>
+                            保存
+                        </Button>
+                    </div>
+                    <p className="text-muted-foreground md:col-span-2 text-xs">
+                        Webhook 地址（填到 PayMongo 控制台，事件 payment.paid / payment.failed）：
+                        <code className="bg-muted rounded px-1">https://你的域名/drama/api/paymongo/webhook</code>
                     </p>
                 </CardContent>
             </Card>

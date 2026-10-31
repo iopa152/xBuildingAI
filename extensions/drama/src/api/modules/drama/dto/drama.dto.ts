@@ -21,6 +21,11 @@ export class CreateDramaDto {
     title!: string;
 
     @IsString()
+    @MaxLength(255)
+    @IsOptional()
+    subtitle?: string;
+
+    @IsString()
     @IsOptional()
     description?: string;
 
@@ -41,6 +46,14 @@ export class CreateDramaDto {
     @IsOptional()
     status?: DramaStatus;
 
+    /**
+     * Content type: 1 live-action, 2 anime, 3 AI generated
+     */
+    @IsInt()
+    @Min(1)
+    @IsOptional()
+    contentType?: number;
+
     @IsBoolean()
     @IsOptional()
     complete?: boolean;
@@ -48,6 +61,26 @@ export class CreateDramaDto {
     @IsBoolean()
     @IsOptional()
     featured?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    hot?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    isNew?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    rising?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    vipOnly?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    exclusive?: boolean;
 
     @IsInt()
     @Min(0)
@@ -58,6 +91,21 @@ export class CreateDramaDto {
     @Min(0)
     @IsOptional()
     heat?: number;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    viewCount?: number;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    likeCount?: number;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    episodeCount?: number;
 
     @IsInt()
     @Min(0)
@@ -83,6 +131,11 @@ export class UpdateDramaDto {
     title?: string;
 
     @IsString()
+    @MaxLength(255)
+    @IsOptional()
+    subtitle?: string;
+
+    @IsString()
     @IsOptional()
     description?: string;
 
@@ -103,6 +156,11 @@ export class UpdateDramaDto {
     @IsOptional()
     status?: DramaStatus;
 
+    @IsInt()
+    @Min(1)
+    @IsOptional()
+    contentType?: number;
+
     @IsBoolean()
     @IsOptional()
     complete?: boolean;
@@ -110,6 +168,26 @@ export class UpdateDramaDto {
     @IsBoolean()
     @IsOptional()
     featured?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    hot?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    isNew?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    rising?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    vipOnly?: boolean;
+
+    @IsBoolean()
+    @IsOptional()
+    exclusive?: boolean;
 
     @IsInt()
     @Min(0)
@@ -120,6 +198,21 @@ export class UpdateDramaDto {
     @Min(0)
     @IsOptional()
     heat?: number;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    viewCount?: number;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    likeCount?: number;
+
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    episodeCount?: number;
 
     @IsInt()
     @Min(0)

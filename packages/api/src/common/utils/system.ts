@@ -1,10 +1,11 @@
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { AppConfig } from "@buildingai/config/app.config";
 import { getCachedExtensionList } from "@buildingai/core/modules";
 import { TerminalLogger } from "@buildingai/logger";
 import { INestApplication } from "@nestjs/common";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
-import { existsSync, readFileSync } from "fs";
+
 import { networkInterfaces } from "os";
 import * as path from "path";
 
@@ -88,7 +89,15 @@ export const tryListen = async (
             startLog(currentPort, startTime);
             return;
         } catch (error) {
-            if (error.code === "EADDRINUSE" && process.env.NODE_ENV === "development") {
+            if (
+                error.code === "EADDRINUSE" &&
+                process.env.NODE_ENV === "development" &&
+                process.env.API_STRICT_PORT !== "0"
+            ) {
+                // Strict port by default: silently drifting to another port left
+                // stale instances serving old code (the extension iframe and H5
+                // all target SERVER_PORT). Set API_STRICT_PORT=0 to re-enable
+                // auto-switching.
                 retries++;
                 currentPort = initialPort + retries;
                 TerminalLogger.warn(
@@ -163,14 +172,20 @@ export const setAssetsDir = async (app: NestExpressApplication) => {
             ];
         });
 
-    const extensionIndexHtmlCache = new Map<string, string>();
+    // index.html is cached keyed by mtime so a rebuilt extension (new hashed
+    // bundle + new index) is picked up without restarting the API
+    const extensionIndexHtmlCache = new Map<string, { mtime: number; html: string }>();
 
-    extensionsMain.forEach((item) => {
+    const loadExtensionIndex = (item: { dir: string; prefix: string }): string | null => {
         const indexPath = path.join(item.dir, "index.html");
-        if (existsSync(item.dir) && existsSync(indexPath)) {
-            extensionIndexHtmlCache.set(item.prefix, readFileSync(indexPath, "utf-8"));
-        }
-    });
+        if (!existsSync(item.dir) || !existsSync(indexPath)) return null;
+        const mtime = statSync(indexPath).mtimeMs;
+        const cached = extensionIndexHtmlCache.get(item.prefix);
+        if (cached && cached.mtime === mtime) return cached.html;
+        const html = readFileSync(indexPath, "utf-8");
+        extensionIndexHtmlCache.set(item.prefix, { mtime, html });
+        return html;
+    };
 
     extensionsMain.forEach((item) => {
         if (existsSync(item.dir)) {
@@ -182,18 +197,16 @@ export const setAssetsDir = async (app: NestExpressApplication) => {
         }
     });
 
-    if (extensionIndexHtmlCache.size > 0) {
-        app.use((req: Request, res: Response, next: NextFunction) => {
-            const matchedPrefix = Array.from(extensionIndexHtmlCache.keys()).find(
-                (prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`),
-            );
+    app.use((req: Request, res: Response, next: NextFunction) => {
+        const matched = extensionsMain.find(
+            (item) => req.path === item.prefix || req.path.startsWith(`${item.prefix}/`),
+        );
+        if (!matched || res.headersSent) return next();
 
-            if (matchedPrefix && !res.headersSent) {
-                res.setHeader("Content-Type", "text/html; charset=utf-8");
-                return res.send(extensionIndexHtmlCache.get(matchedPrefix)!);
-            }
+        const html = loadExtensionIndex(matched);
+        if (html === null) return next();
 
-            next();
-        });
-    }
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.send(html);
+    });
 };

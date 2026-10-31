@@ -39,6 +39,12 @@ export class Drama {
     title: string;
 
     /**
+     * Subtitle (副标题)
+     */
+    @Column({ type: "varchar", length: 255, nullable: true, comment: "副标题" })
+    subtitle?: string;
+
+    /**
      * Synopsis
      */
     @Column({ type: "text", nullable: true, comment: "剧情简介" })
@@ -79,6 +85,42 @@ export class Drama {
      */
     @Column({ type: "boolean", default: false, comment: "是否精选" })
     featured: boolean;
+
+    /**
+     * Content type: 1 live-action, 2 anime, 3 AI generated
+     */
+    @Column({ type: "int", default: 1, comment: "内容类型" })
+    contentType: number;
+
+    /**
+     * Hot list flag (热门榜单)
+     */
+    @Column({ type: "boolean", default: false, comment: "热门榜单" })
+    hot: boolean;
+
+    /**
+     * New release flag (新剧首发)
+     */
+    @Column({ type: "boolean", default: false, comment: "新剧首发" })
+    isNew: boolean;
+
+    /**
+     * Rising list flag (飙升榜)
+     */
+    @Column({ type: "boolean", default: false, comment: "飙升榜" })
+    rising: boolean;
+
+    /**
+     * VIP only flag (VIP专属)
+     */
+    @Column({ type: "boolean", default: false, comment: "VIP专属" })
+    vipOnly: boolean;
+
+    /**
+     * Exclusive copyright flag (独家版权)
+     */
+    @Column({ type: "boolean", default: false, comment: "独家版权" })
+    exclusive: boolean;
 
     /**
      * Coin price to unlock the whole drama, 0 = not sellable as whole

@@ -13,6 +13,10 @@ import type {
 
 export interface UnlockRecordRow extends UnlockRecord {
     drama?: Partial<Drama>;
+    dramaTitle?: string;
+    episodeNo?: number | null;
+    originalPrice?: number;
+    userNickname?: string;
 }
 
 export function useUnlockListQuery(params?: {
@@ -27,14 +31,21 @@ export function useUnlockListQuery(params?: {
     });
 }
 
+export interface UnlockStats {
+    totalOrders: number;
+    episodeOrders: number;
+    wholeOrders: number;
+    totalCoins: number;
+    todayOrders: number;
+    todayCoins: number;
+    todayUnlocks: number;
+    topDramas: { dramaId: string; title: string; unlocks: number; coins: number }[];
+}
+
 export function useUnlockStatsQuery() {
     return useQuery({
         queryKey: ["drama-unlock", "stats"],
-        queryFn: () =>
-            consoleHttpClient.get<{
-                todayUnlocks: number;
-                topDramas: { dramaId: string; title: string; unlocks: number; coins: number }[];
-            }>("/unlock/stats"),
+        queryFn: () => consoleHttpClient.get<UnlockStats>("/unlock/stats"),
     });
 }
 
@@ -42,7 +53,12 @@ export function useUnlockStatsQuery() {
 
 export interface CommentRow extends Comment {
     drama?: Partial<Drama>;
-    user?: { id: string; nickname: string; avatar?: string };
+    user?: { id: string; nickname: string; username?: string; avatar?: string };
+    dramaTitle?: string;
+    userNickname?: string;
+    userAvatar?: string | null;
+    episodeNo?: number | null;
+    replyCount?: number;
 }
 
 export function useCommentListQuery(params?: {
@@ -50,11 +66,27 @@ export function useCommentListQuery(params?: {
     pageSize?: number;
     dramaId?: string;
     status?: string;
+    keyword?: string;
 }) {
     return useQuery({
         queryKey: ["drama-comment", "list", params],
         queryFn: () =>
             consoleHttpClient.get<PaginatedResponse<CommentRow>>("/watch/comment", { params }),
+    });
+}
+
+export interface CommentStats {
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    today: number;
+}
+
+export function useCommentStatsQuery() {
+    return useQuery({
+        queryKey: ["drama-comment", "stats"],
+        queryFn: () => consoleHttpClient.get<CommentStats>("/watch/comment/stats"),
     });
 }
 
@@ -65,9 +97,23 @@ export function useSetCommentStatusMutation() {
     });
 }
 
+export function useBatchCommentStatusMutation() {
+    return useMutation({
+        mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
+            consoleHttpClient.post("/watch/comment/batch-status", { ids, status }),
+    });
+}
+
 export function useDeleteCommentMutation() {
     return useMutation({
         mutationFn: (id: string) => consoleHttpClient.delete(`/watch/comment/${id}`),
+    });
+}
+
+export function useBatchDeleteCommentsMutation() {
+    return useMutation({
+        mutationFn: (ids: string[]) =>
+            consoleHttpClient.post("/watch/comment/batch-delete", { ids }),
     });
 }
 
@@ -80,6 +126,7 @@ export interface RatingRow {
     stars: number;
     createdAt: string;
     dramaTitle?: string;
+    dramaCover?: string | null;
     userNickname?: string;
     userAvatar?: string | null;
 }
@@ -101,6 +148,7 @@ export interface FavoriteRecordRow {
     dramaId: string;
     createdAt: string;
     dramaTitle?: string;
+    dramaCover?: string | null;
     userNickname?: string;
     userAvatar?: string | null;
 }
@@ -114,6 +162,32 @@ export function useFavoriteRecordListQuery(params?: {
         queryKey: ["drama-watch", "favorite", params],
         queryFn: () =>
             consoleHttpClient.get<PaginatedResponse<FavoriteRecordRow>>("/watch/favorite", { params }),
+    });
+}
+
+export interface FavoriteStats {
+    total: number;
+    today: number;
+    topDramas: { dramaId: string; title: string; count: number }[];
+}
+
+export function useFavoriteStatsQuery() {
+    return useQuery({
+        queryKey: ["drama-watch", "favorite-stats"],
+        queryFn: () => consoleHttpClient.get<FavoriteStats>("/watch/favorite/stats"),
+    });
+}
+
+export function useDeleteFavoriteMutation() {
+    return useMutation({
+        mutationFn: (id: string) => consoleHttpClient.delete(`/watch/favorite/${id}`),
+    });
+}
+
+export function useBatchDeleteFavoritesMutation() {
+    return useMutation({
+        mutationFn: (ids: string[]) =>
+            consoleHttpClient.post("/watch/favorite/batch-delete", { ids }),
     });
 }
 
@@ -139,6 +213,34 @@ export function useWatchHistoryListQuery(params?: {
         queryKey: ["drama-watch", "history", params],
         queryFn: () =>
             consoleHttpClient.get<PaginatedResponse<WatchHistoryRow>>("/watch/history", { params }),
+    });
+}
+
+export interface WatchHistoryStats {
+    total: number;
+    totalHours: number;
+    completed: number;
+    today: number;
+    topDramas: { dramaId: string; title: string; count: number }[];
+}
+
+export function useWatchHistoryStatsQuery() {
+    return useQuery({
+        queryKey: ["drama-watch", "history-stats"],
+        queryFn: () => consoleHttpClient.get<WatchHistoryStats>("/watch/history/stats"),
+    });
+}
+
+export function useDeleteHistoryMutation() {
+    return useMutation({
+        mutationFn: (id: string) => consoleHttpClient.delete(`/watch/history/${id}`),
+    });
+}
+
+export function useBatchDeleteHistoryMutation() {
+    return useMutation({
+        mutationFn: (ids: string[]) =>
+            consoleHttpClient.post("/watch/history/batch-delete", { ids }),
     });
 }
 
@@ -184,13 +286,16 @@ export interface TaskProgressRow {
 
 export function useTaskRecordListQuery(params?: {
     taskCode?: string;
+    rewarded?: boolean;
     page?: number;
     pageSize?: number;
 }) {
     return useQuery({
         queryKey: ["drama-task", "record", params],
         queryFn: () =>
-            consoleHttpClient.get<PaginatedResponse<TaskProgressRow>>("/task/record", { params }),
+            consoleHttpClient.get<PaginatedResponse<TaskProgressRow>>("/task/record", {
+                params: params ? { ...params, rewarded: params.rewarded ? "true" : undefined } : undefined,
+            }),
     });
 }
 

@@ -3,14 +3,23 @@ import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
-import { CreateCoinPackageDto, SaveStripeConfigDto, UpdateCoinPackageDto } from "../../dto";
+import {
+    BatchGenerateRedeemCodeDto,
+    CreateCoinPackageDto,
+    CreateRedeemCodeDto,
+    CreateVipPackageDto,
+    SaveStripeConfigDto,
+    UpdateCoinPackageDto,
+    UpdateRedeemCodeDto,
+    UpdateVipPackageDto,
+} from "../../dto";
 import { AirwallexService } from "../../services/airwallex.service";
 import { PayService } from "../../services/pay.service";
 
 /**
- * Coin payment management (console)
+ * Payment management (console)
  */
-@ExtensionConsoleController("pay", "金币充值管理")
+@ExtensionConsoleController("pay", "支付管理")
 export class PayConsoleController extends BaseController {
     constructor(
         private readonly payService: PayService,
@@ -70,10 +79,43 @@ export class PayConsoleController extends BaseController {
     async orders(
         @Query("status") status?: string,
         @Query("userId") userId?: string,
+        @Query("keyword") keyword?: string,
+        @Query("id") id?: string,
+        @Query("username") username?: string,
+        @Query("orderType") orderType?: string,
+        @Query("currency") currency?: string,
+        @Query("channel") channel?: string,
+        @Query("market") market?: string,
+        @Query("promoCode") promoCode?: string,
+        @Query("pitcher") pitcher?: string,
+        @Query("subscriber") subscriber?: string,
+        @Query("createdFrom") createdFrom?: string,
+        @Query("createdTo") createdTo?: string,
+        @Query("paidFrom") paidFrom?: string,
+        @Query("paidTo") paidTo?: string,
         @Query("page") page?: number,
         @Query("pageSize") pageSize?: number,
     ) {
-        return this.payService.listOrdersForConsole({ status, userId, page, pageSize });
+        return this.payService.listOrdersForConsole({
+            status,
+            userId,
+            keyword,
+            id,
+            username,
+            orderType,
+            currency,
+            channel,
+            market,
+            promoCode,
+            pitcher,
+            subscriber,
+            createdFrom,
+            createdTo,
+            paidFrom,
+            paidTo,
+            page,
+            pageSize,
+        });
     }
 
     @Post("order/:id/refund")
@@ -85,5 +127,76 @@ export class PayConsoleController extends BaseController {
             return this.airwallexService.refund(id);
         }
         return this.payService.refund(id);
+    }
+
+    // ---- vip packages ----
+
+    @Get("vip-package")
+    async vipPackages() {
+        return this.payService.listVipPackages();
+    }
+
+    @Post("vip-package")
+    async createVipPackage(@Body() dto: CreateVipPackageDto) {
+        return this.payService.createVipPackage(dto);
+    }
+
+    @Patch("vip-package/:id")
+    async updateVipPackage(
+        @Param("id", UUIDValidationPipe) id: string,
+        @Body() dto: UpdateVipPackageDto,
+    ) {
+        return this.payService.updateVipPackage(id, dto);
+    }
+
+    @Delete("vip-package/:id")
+    async deleteVipPackage(@Param("id", UUIDValidationPipe) id: string) {
+        return this.payService.deleteVipPackage(id);
+    }
+
+    // ---- redeem codes ----
+
+    @Get("redeem-code")
+    async redeemCodes(
+        @Query("keyword") keyword?: string,
+        @Query("rewardType") rewardType?: string,
+        @Query("enabled") enabled?: string,
+        @Query("page") page?: number,
+        @Query("pageSize") pageSize?: number,
+    ) {
+        return this.payService.listRedeemCodes({ keyword, rewardType, enabled, page, pageSize });
+    }
+
+    @Post("redeem-code")
+    async createRedeemCode(@Body() dto: CreateRedeemCodeDto) {
+        return this.payService.createRedeemCode(dto);
+    }
+
+    @Post("redeem-code/batch")
+    async batchGenerateRedeemCodes(@Body() dto: BatchGenerateRedeemCodeDto) {
+        return this.payService.batchGenerateRedeemCodes(dto);
+    }
+
+    @Patch("redeem-code/:id")
+    async updateRedeemCode(
+        @Param("id", UUIDValidationPipe) id: string,
+        @Body() dto: UpdateRedeemCodeDto,
+    ) {
+        return this.payService.updateRedeemCode(id, dto);
+    }
+
+    @Delete("redeem-code/:id")
+    async deleteRedeemCode(@Param("id", UUIDValidationPipe) id: string) {
+        return this.payService.deleteRedeemCode(id);
+    }
+
+    @Get("redeem-record")
+    async redeemRecords(
+        @Query("keyword") keyword?: string,
+        @Query("rewardType") rewardType?: string,
+        @Query("page") page?: number,
+        @Query("pageSize") pageSize?: number,
+    ) {
+        return this.payService.listRedeemRecords({ keyword, rewardType, page, pageSize });
     }
 }

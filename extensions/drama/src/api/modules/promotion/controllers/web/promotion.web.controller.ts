@@ -78,8 +78,16 @@ export class PromotionWebController extends BaseController {
      * Bind current logged user to a promo code (first-touch attribution)
      */
     @Post("attribute")
-    async attribute(@Playground() user: UserPlayground, @Body("code") code: string) {
-        return this.promotionService.attribute(user.id, code);
+    async attribute(
+        @Playground() user: UserPlayground,
+        @Body("code") code: string,
+        @Req() req: Request,
+    ) {
+        return this.promotionService.attribute(user.id, code, {
+            ip: (req.headers["x-forwarded-for"] as string)?.split(",")[0] || req.ip,
+            userAgent: req.headers["user-agent"],
+            sourceUrl: req.headers.referer,
+        });
     }
 
     /**

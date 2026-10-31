@@ -18,11 +18,13 @@ import {
     TableRow,
 } from "@buildingai/ui/components/ui/table";
 import { cn } from "@buildingai/ui/lib/utils";
-import { Download, RotateCw } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@buildingai/ui/components/ui/dialog";
+import { Label } from "@buildingai/ui/components/ui/label";
+import { CalendarPlus, Download, RotateCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { usePromoOverviewQuery } from "../../../services";
+import { usePromoOverviewQuery, useSetSpendMutation } from "../../../services";
 import type { PromoOverviewParams } from "../../../services";
 import { formatMoney, formatPercent, lastDays } from "./shared";
 
@@ -48,6 +50,9 @@ export default function PromoOverviewPage() {
         dimension: "day",
     });
     const [applied, setApplied] = useState<PromoOverviewParams>(draft);
+    const [spendOpen, setSpendOpen] = useState(false);
+    const [spendForm, setSpendForm] = useState({ linkId: "", statDate: "", spend: "" });
+    const setSpend = useSetSpendMutation();
 
     const { data, isLoading, isFetching, refetch } = usePromoOverviewQuery(applied);
     const items = data?.items ?? [];
@@ -63,6 +68,8 @@ export default function PromoOverviewPage() {
             "注册率",
             "充值人数",
             "充值金额",
+            "消耗",
+            "ROI",
             "付费率",
             "客单价",
             "ARPU",
@@ -74,6 +81,8 @@ export default function PromoOverviewPage() {
             formatPercent(item.registrationRate),
             item.payUsers,
             item.revenue.toFixed(2),
+            item.spend.toFixed(2),
+            item.roi.toFixed(2),
             formatPercent(item.payRate),
             item.avgOrder.toFixed(2),
             item.arpu.toFixed(2),
@@ -204,12 +213,106 @@ export default function PromoOverviewPage() {
                     </SelectContent>
                 </Select>
 
+                <Button variant="outline" onClick={() => setSpendOpen(true)}>
+                    <CalendarPlus />
+                    录入消耗
+                </Button>
                 <Button onClick={() => setApplied({ ...draft })}>查询</Button>
                 <Button variant="outline" onClick={exportCsv}>
                     <Download />
                     导出表格
                 </Button>
             </div>
+
+            <Dialog open={spendOpen} onOpenChange={setSpendOpen}>
+                <DialogContent className="sm:max-w-[440px]" aria-describedby={undefined}>
+                    <DialogHeader>
+                        <DialogTitle>录入推广消耗</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-2">
+                        <div className="grid gap-1.5">
+                            <Label>推广链接</Label>
+                            <Select
+                                value={spendForm.linkId || "__none"}
+                                onValueChange={(v) =>
+                                    setSpendForm({ ...spendForm, linkId: v === "__none" ? "" : v })
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="选择链接" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-72">
+                                    <SelectItem value="__none" disabled>
+                                        选择链接
+                                    </SelectItem>
+                                    {(data?.links ?? []).map((l) => (
+                                        <SelectItem key={l.id} value={l.id}>
+                                            {l.name}（{l.code}）
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label>日期</Label>
+                            <Input
+                                type="date"
+                                value={spendForm.statDate}
+                                onChange={(e) =>
+                                    setSpendForm({ ...spendForm, statDate: e.target.value })
+                                }
+                            />
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label>消耗金额（USD）</Label>
+                            <Input
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                value={spendForm.spend}
+                                onChange={(e) =>
+                                    setSpendForm({ ...spendForm, spend: e.target.value })
+                                }
+                            />
+                        </div>
+                        <p className="text-muted-foreground text-xs">
+                            同一链接同日重复录入会覆盖；录入后本页消耗与 ROI 即时生效。
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSpendOpen(false)}>
+                            取消
+                        </Button>
+                        <Button
+                            disabled={setSpend.isPending}
+                            onClick={async () => {
+                                if (!spendForm.linkId || !spendForm.statDate) {
+                                    toast.error("请选择链接和日期");
+                                    return;
+                                }
+                                const n = Number(spendForm.spend);
+                                if (!Number.isFinite(n) || n < 0) {
+                                    toast.error("消耗金额不合法");
+                                    return;
+                                }
+                                try {
+                                    await setSpend.mutateAsync({
+                                        linkId: spendForm.linkId,
+                                        statDate: spendForm.statDate,
+                                        spend: n,
+                                    });
+                                    toast.success("已录入");
+                                    setSpendOpen(false);
+                                    setApplied({ ...applied });
+                                } catch {
+                                    // http client shows the error
+                                }
+                            }}
+                        >
+                            保存
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {isLoading ? (
                 <div className="flex flex-1 items-center justify-center py-20">
@@ -228,6 +331,8 @@ export default function PromoOverviewPage() {
                                 <TableHead className="min-w-20">注册率</TableHead>
                                 <TableHead className="min-w-20">充值人数</TableHead>
                                 <TableHead className="min-w-24">充值金额</TableHead>
+                                <TableHead className="min-w-20">消耗</TableHead>
+                                <TableHead className="min-w-20">ROI</TableHead>
                                 <TableHead className="min-w-20">付费率</TableHead>
                                 <TableHead className="min-w-20">客单价</TableHead>
                                 <TableHead className="min-w-20">ARPU</TableHead>
@@ -254,6 +359,18 @@ export default function PromoOverviewPage() {
                                             {formatMoney(item.revenue)}
                                         </TableCell>
                                         <TableCell className="tabular-nums">
+                                            {formatMoney(item.spend)}
+                                        </TableCell>
+                                        <TableCell
+                                            className={
+                                                item.roi >= 1
+                                                    ? "tabular-nums text-emerald-600 dark:text-emerald-400"
+                                                    : "tabular-nums text-rose-600 dark:text-rose-400"
+                                            }
+                                        >
+                                            {item.roi.toFixed(2)}
+                                        </TableCell>
+                                        <TableCell className="tabular-nums">
                                             {formatPercent(item.payRate)}
                                         </TableCell>
                                         <TableCell className="tabular-nums">
@@ -266,7 +383,7 @@ export default function PromoOverviewPage() {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={9} className="h-24 text-center">
+                                    <TableCell colSpan={11} className="h-24 text-center">
                                         暂无数据
                                     </TableCell>
                                 </TableRow>
@@ -290,6 +407,12 @@ export default function PromoOverviewPage() {
                                     </TableCell>
                                     <TableCell className="tabular-nums">
                                         {formatMoney(totals.revenue)}
+                                    </TableCell>
+                                    <TableCell className="tabular-nums">
+                                        {formatMoney(totals.spend)}
+                                    </TableCell>
+                                    <TableCell className="tabular-nums">
+                                        {totals.roi.toFixed(2)}
                                     </TableCell>
                                     <TableCell className="tabular-nums">
                                         {formatPercent(totals.payRate)}

@@ -49,10 +49,22 @@ export class Episode {
     title?: string;
 
     /**
+     * Episode description / synopsis
+     */
+    @Column({ type: "varchar", length: 1000, nullable: true, comment: "剧集简介" })
+    description?: string;
+
+    /**
      * Video url (VOD playback url)
      */
     @Column({ type: "varchar", length: 1000, comment: "视频地址" })
     videoUrl: string;
+
+    /**
+     * Thumbnail url shown in lists / previews
+     */
+    @Column({ type: "varchar", length: 1000, nullable: true, comment: "缩略图" })
+    thumbnail?: string;
 
     /**
      * Duration in seconds
@@ -73,6 +85,12 @@ export class Episode {
     isFree: boolean;
 
     /**
+     * VIP only episode flag
+     */
+    @Column({ type: "boolean", default: false, comment: "VIP免费（VIP专享）" })
+    vipFree: boolean;
+
+    /**
      * Publish status
      */
     @Column({ type: "varchar", length: 20, default: EpisodeStatus.PUBLISHED, comment: "状态" })
@@ -83,6 +101,18 @@ export class Episode {
      */
     @Column({ type: "int", default: 0, comment: "点赞数" })
     likeCount: number;
+
+    /**
+     * Play count (denormalized)
+     */
+    @Column({ type: "int", default: 0, comment: "播放次数" })
+    playCount: number;
+
+    /**
+     * Scheduled publish time, null = immediately available
+     */
+    @Column({ type: "timestamp", nullable: true, comment: "上线时间" })
+    publishTime?: Date;
 
     @CreateDateColumn({ comment: "创建时间" })
     createdAt: Date;

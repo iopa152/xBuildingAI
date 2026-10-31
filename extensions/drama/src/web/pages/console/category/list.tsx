@@ -1,4 +1,15 @@
 import { useDocumentHead } from "@buildingai/hooks";
+import { cn } from "@buildingai/ui/lib/utils";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@buildingai/ui/components/ui/alert-dialog";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Checkbox } from "@buildingai/ui/components/ui/checkbox";
 import { Input } from "@buildingai/ui/components/ui/input";
@@ -11,16 +22,17 @@ import {
     TableHeader,
     TableRow,
 } from "@buildingai/ui/components/ui/table";
-import { TimeText } from "@buildingai/ui/components/ui/time-text";
-import { Pencil, Plus, Trash } from "lucide-react";
-import { useState } from "react";
+import { Pencil, Plus, RotateCw, Search, Trash } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
     useBatchDeleteCategoriesMutation,
     useCategoryListQuery,
     useDeleteCategoryMutation,
+    useLanguageListQuery,
 } from "../../../services";
+import { Pager, Pill } from "../promo/shared";
 import CategoryEditDialog from "./edit";
 
 export default function CategoryListPage() {
@@ -28,62 +40,77 @@ export default function CategoryListPage() {
         title: "短剧分类",
     });
 
-    const [searchName, setSearchName] = useState("");
+    const [keyword, setKeyword] = useState("");
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [deleteTargets, setDeleteTargets] = useState<string[]>([]);
 
     const {
         data: categories = [],
         isLoading,
+        isFetching,
         refetch,
-    } = useCategoryListQuery({ name: searchName || undefined });
+    } = useCategoryListQuery({ keyword: keyword.trim() || undefined });
+    const { data: languages = [] } = useLanguageListQuery();
     const deleteMutation = useDeleteCategoryMutation();
     const batchDeleteMutation = useBatchDeleteCategoriesMutation();
 
-    const handleToggleAll = () => {
-        const allSelected =
-            categories.length > 0 && categories.every((cat) => selectedIds.has(cat.id));
-        const newSelected = new Set(selectedIds);
-        if (allSelected) {
-            categories.forEach((cat) => newSelected.delete(cat.id));
-        } else {
-            categories.forEach((cat) => newSelected.add(cat.id));
-        }
-        setSelectedIds(newSelected);
+    const languageName = useMemo(() => {
+        const map = new Map(languages.map((l) => [l.code, l.name]));
+        return (code: string) => map.get(code) ?? code;
+    }, [languages]);
+
+    const total = categories.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const pageRows = categories.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize,
+    );
+    const pageIds = pageRows.map((c) => c.id);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+    const someSelected = !allSelected && pageIds.some((id) => selected.has(id));
+    const selectedIds = [...selected];
+
+    useEffect(() => {
+        setSelected((prev) => {
+            const existing = new Set(categories.map((c) => c.id));
+            const next = new Set([...prev].filter((id) => existing.has(id)));
+            return next.size === prev.size ? prev : next;
+        });
+    }, [categories]);
+
+    const openCreate = () => {
+        setEditingId(null);
+        setEditDialogOpen(true);
     };
 
-    const handleToggleRow = (id: string) => {
-        const newSelected = new Set(selectedIds);
-        if (newSelected.has(id)) {
-            newSelected.delete(id);
-        } else {
-            newSelected.add(id);
-        }
-        setSelectedIds(newSelected);
+    const openEdit = (id: string) => {
+        setEditingId(id);
+        setEditDialogOpen(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("确定要删除这个分类吗？")) return;
+    const askDelete = (ids: string[]) => {
+        if (!ids.length) return;
+        setDeleteTargets(ids);
+    };
+
+    const confirmDelete = async () => {
         try {
-            await deleteMutation.mutateAsync(id);
+            if (deleteTargets.length === 1) {
+                await deleteMutation.mutateAsync(deleteTargets[0]);
+            } else {
+                await batchDeleteMutation.mutateAsync(deleteTargets);
+            }
             toast.success("删除成功");
+            setSelected(new Set());
+            setDeleteTargets([]);
             refetch();
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const handleBatchDelete = async () => {
-        if (selectedIds.size === 0) return;
-        if (!confirm(`确定要删除选中的 ${selectedIds.size} 个分类吗？`)) return;
-        try {
-            await batchDeleteMutation.mutateAsync(Array.from(selectedIds));
-            toast.success("批量删除成功");
-            setSelectedIds(new Set());
-            refetch();
-        } catch (error) {
-            console.error(error);
+        } catch {
+            // 错误提示由 http client 统一处理
         }
     };
 
@@ -97,129 +124,140 @@ export default function CategoryListPage() {
 
     return (
         <>
-            <div className="mb-4 flex flex-wrap gap-4">
-                <Input
-                    placeholder="搜索分类名称..."
-                    value={searchName}
-                    onChange={(e) => setSearchName(e.target.value)}
-                    className="max-w-xs"
-                />
-
-                <div className="ml-auto flex items-end gap-2">
-                    <Button
-                        variant="destructive"
-                        disabled={selectedIds.size === 0}
-                        onClick={handleBatchDelete}
-                    >
-                        <Trash />
-                        批量删除 ({selectedIds.size})
-                    </Button>
-
-                    <Button
-                        onClick={() => {
-                            setEditingId(null);
-                            setEditDialogOpen(true);
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="icon-sm" aria-label="刷新" onClick={() => refetch()}>
+                    <RotateCw className={cn(isFetching && "animate-spin")} />
+                </Button>
+                <Button onClick={openCreate}>
+                    <Plus />
+                    添加
+                </Button>
+                <Button
+                    disabled={selected.size !== 1}
+                    onClick={() => selectedIds[0] && openEdit(selectedIds[0])}
+                >
+                    <Pencil />
+                    编辑
+                </Button>
+                <Button
+                    variant="destructive"
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:bg-destructive/60 disabled:text-white/50 disabled:opacity-100 dark:bg-destructive dark:hover:bg-destructive/90 dark:disabled:bg-destructive/60"
+                    disabled={selected.size === 0}
+                    onClick={() => askDelete(selectedIds)}
+                >
+                    <Trash />
+                    删除
+                </Button>
+                <div className="relative ml-auto w-full max-w-xs">
+                    <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                    <Input
+                        value={keyword}
+                        onChange={(e) => {
+                            setKeyword(e.target.value);
+                            setPage(1);
                         }}
-                    >
-                        <Plus />
-                        新建分类
-                    </Button>
+                        placeholder="通过ID、名称、标识模糊搜索"
+                        className="pl-9"
+                    />
                 </div>
             </div>
 
             {isLoading ? (
-                <div className="mb-4 flex flex-1 items-center justify-center py-20">
+                <div className="flex items-center justify-center py-20">
                     <Spinner className="size-8" />
                 </div>
             ) : (
-                <div className="mb-4 overflow-hidden rounded-md border">
+                <div className="overflow-x-auto rounded-md border">
                     <Table>
                         <TableHeader className="bg-muted">
                             <TableRow>
                                 <TableHead className="w-12">
                                     <Checkbox
                                         checked={
-                                            categories.length > 0 &&
-                                            categories.every((cat) => selectedIds.has(cat.id))
+                                            allSelected
+                                                ? true
+                                                : someSelected
+                                                  ? "indeterminate"
+                                                  : false
                                         }
-                                        onCheckedChange={handleToggleAll}
-                                        aria-label="Select all"
+                                        onCheckedChange={(checked) => {
+                                            const next = new Set(selected);
+                                            if (checked) pageIds.forEach((id) => next.add(id));
+                                            else pageIds.forEach((id) => next.delete(id));
+                                            setSelected(next);
+                                        }}
+                                        aria-label="全选"
                                     />
                                 </TableHead>
-                                <TableHead>名称</TableHead>
-                                <TableHead>标识</TableHead>
-                                <TableHead>语言</TableHead>
-                                <TableHead>排序</TableHead>
-                                <TableHead>启用</TableHead>
-                                <TableHead>创建时间</TableHead>
+                                <TableHead className="w-14">ID</TableHead>
+                                <TableHead className="min-w-32">URL标识</TableHead>
+                                <TableHead className="min-w-32">分类名称</TableHead>
+                                <TableHead className="w-16">图标</TableHead>
+                                <TableHead className="min-w-24">语言</TableHead>
+                                <TableHead className="w-16">排序</TableHead>
+                                <TableHead className="w-20">状态</TableHead>
                                 <TableHead className="w-24">操作</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {categories.length > 0 ? (
-                                categories.map((category) => (
-                                    <TableRow key={category.id}>
+                            {pageRows.length > 0 ? (
+                                pageRows.map((category, idx) => (
+                                    <TableRow
+                                        key={category.id}
+                                        data-state={
+                                            selected.has(category.id) ? "selected" : undefined
+                                        }
+                                    >
                                         <TableCell>
                                             <Checkbox
-                                                checked={selectedIds.has(category.id)}
-                                                onCheckedChange={() =>
-                                                    handleToggleRow(category.id)
-                                                }
-                                                aria-label="Select row"
+                                                checked={selected.has(category.id)}
+                                                onCheckedChange={() => {
+                                                    const next = new Set(selected);
+                                                    if (next.has(category.id)) next.delete(category.id);
+                                                    else next.add(category.id);
+                                                    setSelected(next);
+                                                }}
+                                                aria-label={`选择 ${category.name}`}
                                             />
                                         </TableCell>
-                                        <TableCell>
-                                            <div>
-                                                <p className="font-medium">{category.name}</p>
-                                                {category.description && (
-                                                    <p className="text-muted-foreground truncate text-sm">
-                                                        {category.description}
-                                                    </p>
-                                                )}
-                                            </div>
+                                        <TableCell className="text-muted-foreground tabular-nums">
+                                            {total - (currentPage - 1) * pageSize - idx}
                                         </TableCell>
                                         <TableCell>
-                                            <code className="bg-muted rounded px-1 py-0.5 text-sm">
+                                            <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
                                                 {category.code}
                                             </code>
                                         </TableCell>
-                                        <TableCell>{category.language}</TableCell>
-                                        <TableCell>{category.sort || 0}</TableCell>
+                                        <TableCell className="font-medium">{category.name}</TableCell>
                                         <TableCell>
-                                            {category.status ? (
-                                                <span className="text-green-600">启用</span>
-                                            ) : (
-                                                <span className="text-muted-foreground">禁用</span>
-                                            )}
+                                            <span className="text-lg">{category.icon || "-"}</span>
+                                        </TableCell>
+                                        <TableCell>{languageName(category.language)}</TableCell>
+                                        <TableCell className="tabular-nums">
+                                            {category.sort || 0}
                                         </TableCell>
                                         <TableCell>
-                                            {category.createdAt ? (
-                                                <TimeText
-                                                    value={category.createdAt}
-                                                    format="YYYY/MM/DD HH:mm"
-                                                />
-                                            ) : (
-                                                "-"
-                                            )}
+                                            <Pill tone={category.status ? "green" : "gray"}>
+                                                {category.status ? "显示" : "隐藏"}
+                                            </Pill>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex items-center gap-1">
+                                            <div className="flex items-center gap-1.5">
                                                 <Button
-                                                    variant="ghost"
                                                     size="icon-sm"
-                                                    onClick={() => {
-                                                        setEditingId(category.id);
-                                                        setEditDialogOpen(true);
-                                                    }}
+                                                    aria-label={`编辑 ${category.name}`}
+                                                    onClick={() => openEdit(category.id)}
                                                 >
-                                                    <Pencil className="h-4 w-4" />
+                                                    <Pencil />
                                                 </Button>
                                                 <Button
-                                                    variant="ghost"
                                                     size="icon-sm"
-                                                    onClick={() => handleDelete(category.id)}
+                                                    variant="destructive"
+                                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
+                                                    aria-label={`删除 ${category.name}`}
+                                                    onClick={() => askDelete([category.id])}
                                                 >
-                                                    <Trash className="text-destructive h-4 w-4" />
+                                                    <Trash />
                                                 </Button>
                                             </div>
                                         </TableCell>
@@ -227,7 +265,7 @@ export default function CategoryListPage() {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="h-24 text-center">
+                                    <TableCell colSpan={9} className="h-24 text-center">
                                         暂无数据
                                     </TableCell>
                                 </TableRow>
@@ -237,7 +275,44 @@ export default function CategoryListPage() {
                 </div>
             )}
 
-            <CategoryEditDialog open={editDialogOpen} id={editingId} onClose={handleDialogClose} />
+            <Pager
+                page={currentPage}
+                pageSize={pageSize}
+                total={total}
+                onPage={setPage}
+                onPageSize={setPageSize}
+            />
+
+            <CategoryEditDialog
+                open={editDialogOpen}
+                id={editingId}
+                onClose={handleDialogClose}
+            />
+
+            <AlertDialog
+                open={deleteTargets.length > 0}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTargets([]);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>确定删除选中记录?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            即将删除 {deleteTargets.length} 条分类记录，删除后不可恢复。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => void confirmDelete()}
+                        >
+                            确定
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }

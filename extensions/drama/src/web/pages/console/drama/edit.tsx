@@ -123,7 +123,7 @@ export default function DramaEditPage() {
             } else {
                 const created = await createMutation.mutateAsync(formData);
                 toast.success("创建成功，可继续上传剧集");
-                navigate(`edit?id=${created.id}`, { replace: true });
+                navigate(`/console/drama/edit?id=${created.id}`, { replace: true });
             }
         } catch (error) {
             console.error(error);
@@ -181,7 +181,7 @@ export default function DramaEditPage() {
                     {dramaId ? `编辑剧目${drama ? `：${drama.title}` : ""}` : "新建剧目"}
                 </h2>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => navigate("list")}>
+                    <Button variant="outline" onClick={() => navigate("/console/drama/list")}>
                         返回列表
                     </Button>
                     <Button onClick={handleSave} disabled={saving} loading={saving}>

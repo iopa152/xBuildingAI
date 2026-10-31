@@ -36,6 +36,18 @@ export class CategoryService extends BaseService<DramaCategory> {
      * Query categories (console)
      */
     async list(dto: QueryDramaCategoryDto): Promise<DramaCategory[]> {
+        const keyword = dto.keyword?.trim();
+        if (keyword) {
+            const pattern = `%${keyword}%`;
+            return this.categoryRepository.find({
+                where: [
+                    { name: Like(pattern) },
+                    { code: Like(pattern) },
+                    { language: Like(pattern) },
+                ],
+                order: { sort: "DESC", createdAt: "DESC" },
+            });
+        }
         return this.categoryRepository.find({
             where: {
                 ...(dto.name ? { name: Like(`%${dto.name}%`) } : {}),

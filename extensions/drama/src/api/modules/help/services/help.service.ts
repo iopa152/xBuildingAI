@@ -1,5 +1,6 @@
 import { BaseService } from "@buildingai/base";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
+import { User as UserEntity } from "@buildingai/db/entities";
 import { DataSource, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { ExtensionBillingService } from "@buildingai/extension-sdk";
@@ -108,6 +109,7 @@ export class HelpService extends BaseService<WithdrawalRequest> {
                 WithdrawalRequest,
                 em.create(WithdrawalRequest, {
                     userId,
+                    withdrawNo: `HDW${Date.now()}${Math.floor(Math.random() * 1000)}`,
                     coins,
                     method: method.trim().slice(0, 32),
                     account: account.trim().slice(0, 200),
@@ -136,14 +138,72 @@ export class HelpService extends BaseService<WithdrawalRequest> {
         page?: number;
         pageSize?: number;
         status?: string;
+        keyword?: string;
+        minCoins?: number;
+        maxCoins?: number;
+        currency?: string;
+        payee?: string;
+        bankCountry?: string;
+        bank?: string;
+        applyFrom?: string;
+        applyTo?: string;
+        reviewedFrom?: string;
+        reviewedTo?: string;
     }) {
-        const [items, total] = await this.withdrawalRepository.findAndCount({
-            where: query.status ? { status: query.status } : {},
-            order: { createdAt: "DESC" },
-            skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 20),
-            take: query.pageSize ?? 20,
-        });
-        return { items, total, page: query.page ?? 1, pageSize: query.pageSize ?? 20 };
+        const qb = this.withdrawalRepository
+            .createQueryBuilder("w")
+            .orderBy("w.createdAt", "DESC")
+            .skip(((query.page ?? 1) - 1) * (query.pageSize ?? 20))
+            .take(query.pageSize ?? 20);
+
+        if (query.status) qb.andWhere("w.status = :status", { status: query.status });
+        if (query.currency) qb.andWhere("w.currency = :currency", { currency: query.currency });
+        if (query.minCoins !== undefined)
+            qb.andWhere("w.coins >= :minCoins", { minCoins: query.minCoins });
+        if (query.maxCoins !== undefined)
+            qb.andWhere("w.coins <= :maxCoins", { maxCoins: query.maxCoins });
+        if (query.payee) qb.andWhere("w.payeeName ILIKE :payee", { payee: `%${query.payee}%` });
+        if (query.bankCountry)
+            qb.andWhere("w.bankCountry ILIKE :bc", { bc: `%${query.bankCountry}%` });
+        if (query.bank) qb.andWhere("w.bankName ILIKE :bank", { bank: `%${query.bank}%` });
+        if (query.keyword)
+            qb.andWhere("(w.withdrawNo ILIKE :kw OR w.account ILIKE :kw)", {
+                kw: `%${query.keyword}%`,
+            });
+        if (query.applyFrom)
+            qb.andWhere("w.createdAt >= :applyFrom", { applyFrom: query.applyFrom });
+        if (query.applyTo)
+            qb.andWhere("w.createdAt <= :applyTo", { applyTo: `${query.applyTo} 23:59:59` });
+        if (query.reviewedFrom)
+            qb.andWhere("w.reviewedAt >= :reviewedFrom", { reviewedFrom: query.reviewedFrom });
+        if (query.reviewedTo)
+            qb.andWhere("w.reviewedAt <= :reviewedTo", {
+                reviewedTo: `${query.reviewedTo} 23:59:59`,
+            });
+
+        const [items, total] = await qb.getManyAndCount();
+
+        const userIds = Array.from(new Set(items.map((w) => w.userId)));
+        const userMap = new Map<string, { username: string; nickname: string }>();
+        if (userIds.length) {
+            const users = await this.dataSource
+                .getRepository(UserEntity)
+                .find({ where: userIds.map((id) => ({ id })) });
+            for (const u of users) {
+                userMap.set(u.id, { username: u.username, nickname: u.nickname });
+            }
+        }
+
+        return {
+            items: items.map((w) => ({
+                ...w,
+                username: userMap.get(w.userId)?.username ?? null,
+                nickname: userMap.get(w.userId)?.nickname ?? null,
+            })),
+            total,
+            page: query.page ?? 1,
+            pageSize: query.pageSize ?? 20,
+        };
     }
 
     /**

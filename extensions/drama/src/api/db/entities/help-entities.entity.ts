@@ -30,10 +30,34 @@ export class WithdrawalRequest {
     userId: string;
 
     /**
+     * HDW + timestamp + random
+     */
+    @Column({ type: "varchar", length: 40, default: "", comment: "提现单号" })
+    withdrawNo: string;
+
+    /**
      * Coins to withdraw
      */
     @Column({ type: "int", comment: "提现金币" })
     coins: number;
+
+    /**
+     * Actual payout amount in major currency units
+     */
+    @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, comment: "实际到账" })
+    actualAmount?: string;
+
+    @Column({ type: "varchar", length: 8, default: "PHP", comment: "币种" })
+    currency: string;
+
+    @Column({ type: "varchar", length: 100, nullable: true, comment: "收款人" })
+    payeeName?: string;
+
+    @Column({ type: "varchar", length: 64, nullable: true, comment: "银行国家" })
+    bankCountry?: string;
+
+    @Column({ type: "varchar", length: 100, nullable: true, comment: "银行" })
+    bankName?: string;
 
     /**
      * payout method, e.g. paypal / usdt / bank
