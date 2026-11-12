@@ -79,6 +79,7 @@ interface VipForm {
     durationType: string;
     days: string;
     price: string;
+    coinPrice: string;
     originalPrice: string;
     phpPrice: string;
     phpOriginalPrice: string;
@@ -99,6 +100,7 @@ const emptyForm: VipForm = {
     durationType: "month",
     days: "30",
     price: "",
+    coinPrice: "0",
     originalPrice: "",
     phpPrice: "",
     phpOriginalPrice: "",
@@ -125,6 +127,7 @@ function vipToPayload(form: VipForm) {
         durationType: form.durationType,
         days: Number(form.days),
         price: Number(form.price),
+            coinPrice: Number(form.coinPrice) || 0,
         originalPrice: num(form.originalPrice),
         phpPrice: num(form.phpPrice),
         phpOriginalPrice: num(form.phpOriginalPrice),
@@ -159,7 +162,11 @@ function VipPreviewCard({ pkg }: { pkg: VipPackageRow }) {
                     <Crown className="size-4 text-amber-500" />
                     <span className="font-semibold">{pkg.name}</span>
                 </div>
-                <span className="text-lg font-bold">${Number(pkg.price).toFixed(2)}</span>
+                <span className="text-lg font-bold">${Number(pkg.price).toFixed(2)}</span>${
+                                                Number(pkg.coinPrice ?? 0) > 0
+                                                    ? ` / ${pkg.coinPrice} 金币`
+                                                    : ""
+                                            }
             </div>
             <div className="mt-1.5 flex items-center gap-2">
                 <span className="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs font-medium">
@@ -245,6 +252,7 @@ export default function VipPackagePage() {
             durationType: row.durationType,
             days: String(row.days),
             price: String(row.price),
+            coinPrice: String(row.coinPrice ?? 0),
             originalPrice: row.originalPrice ? String(row.originalPrice) : "",
             phpPrice: row.phpPrice ? String(row.phpPrice) : "",
             phpOriginalPrice: row.phpOriginalPrice ? String(row.phpOriginalPrice) : "",
@@ -606,6 +614,28 @@ export default function VipPackagePage() {
                                         className="pl-7"
                                     />
                                 </div>
+                            </div>
+
+                            <Label htmlFor="vip-coinprice" className="justify-end font-normal">
+                                金币购买价
+                            </Label>
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 text-sm">
+                                        🪙
+                                    </span>
+                                    <Input
+                                        id="vip-coinprice"
+                                        value={form.coinPrice}
+                                        inputMode="numeric"
+                                        onChange={(e) => setForm({ ...form, coinPrice: e.target.value })}
+                                        placeholder="0 = 不支持金币购买"
+                                        className="pl-8"
+                                    />
+                                </div>
+                                <p className="text-muted-foreground text-xs">H5 用金币购买 VIP</p>
+                            </div>
+                            <div className="flex items-center gap-2">
                                 <div className="relative flex-1">
                                     <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 text-sm">
                                         ₱
@@ -617,7 +647,7 @@ export default function VipPackagePage() {
                                             setForm({ ...form, phpPrice: e.target.value })
                                         }
                                         placeholder="0.00"
-                                        className="pl-8"
+                                        className="pl-7"
                                     />
                                 </div>
                             </div>

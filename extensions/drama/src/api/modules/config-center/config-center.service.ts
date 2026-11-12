@@ -2,9 +2,10 @@ import * as net from "node:net";
 
 import { BaseService } from "@buildingai/base";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { Repository } from "@buildingai/db/typeorm";
+import { DataSource, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable, Logger } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 
 import { AirwallexConfig } from "../../db/entities/airwallex-config.entity";
 import { PaymongoConfig } from "../../db/entities/paymongo-config.entity";
@@ -44,6 +45,7 @@ export class ConfigCenterService extends BaseService<ThirdPartyConfig> {
         private readonly paymongoRepository: Repository<PaymongoConfig>,
         @InjectRepository(Drama)
         private readonly dramaRepository: Repository<Drama>,
+        private readonly dataSource: DataSource,
     ) {
         super(configRepository);
     }
@@ -361,5 +363,189 @@ export class ConfigCenterService extends BaseService<ThirdPartyConfig> {
             link: String(row.config?.link ?? ""),
             remark: row.remark,
         };
+    }
+    // ---------------- notify senders (SMTP / push / SMS) ----------------
+
+    private async smtpConfig() {
+        const row = await this.configRepository.findOneBy({ category: "email", provider: "smtp" });
+        const c = (row?.config ?? {}) as Record<string, string>;
+        return {
+            host: c.host ?? "",
+            port: Number(c.port ?? 465),
+            username: c.username ?? "",
+            password: c.password ?? "",
+            from: c.from || c.username || "",
+        };
+    }
+
+    async sendTestEmail(to: string) {
+        const cfg = await this.smtpConfig();
+        await smtpSendMail(
+            cfg,
+            to,
+            "HelloDrama 配置中心测试邮件",
+            "<p>这是一封来自 配置中心 的测试邮件。收到即表示 SMTP 配置可用。</p>",
+        );
+        await this.configRepository.update(
+            { category: "email", provider: "smtp" },
+            { verified: true },
+        );
+        return { ok: true };
+    }
+
+    /** used by the daily report push; silently no-ops when SMTP is not enabled */
+    async mailIfEnabled(to: string, subject: string, html: string): Promise<boolean> {
+        try {
+            const row = await this.configRepository.findOneBy({ category: "email", provider: "smtp" });
+            if (!row?.enabled) return false;
+            await smtpSendMail(await this.smtpConfig(), to, subject, html);
+            return true;
+        } catch (err) {
+            this.logger.warn(`report mail failed: ${(err as Error).message}`);
+            return false;
+        }
+    }
+
+    private async pushConfig(provider: string) {
+        const row = await this.configRepository.findOneBy({ category: "push", provider });
+        return (row?.config ?? {}) as Record<string, string>;
+    }
+
+    private async smsConfig(provider: string) {
+        const row = await this.configRepository.findOneBy({ category: "sms", provider });
+        return (row?.config ?? {}) as Record<string, string>;
+    }
+
+    /** fire a push notification through the enabled push provider */
+    async sendPush(title: string, body: string, target?: string): Promise<{ provider: string }> {
+        const rows = await this.configRepository.find({ where: { category: "push", enabled: true } });
+        const row = rows[0];
+        if (!row) throw HttpErrorFactory.badRequest("消息推送未启用");
+        const cfg = await this.pushConfig(row.provider);
+
+        if (row.provider === "firebase") {
+            const res = await fetch("https://fcm.googleapis.com/fcm/send", {
+                method: "POST",
+                headers: {
+                    Authorization: `key=${cfg.serverKey ?? ""}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    to: target || "/topics/all",
+                    notification: { title, body },
+                }),
+            });
+            if (!res.ok) throw new Error(`FCM HTTP ${res.status}`);
+        } else if (row.provider === "onesignal") {
+            const res = await fetch("https://onesignal.com/api/v1/notifications", {
+                method: "POST",
+                headers: {
+                    Authorization: `Basic ${cfg.apiKey ?? ""}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    app_id: cfg.appId ?? "",
+                    included_segments: ["Subscribed Users"],
+                    headings: { en: title },
+                    contents: { en: body },
+                }),
+            });
+            if (!res.ok) throw new Error(`OneSignal HTTP ${res.status}`);
+        }
+        return { provider: row.provider };
+    }
+
+    /** send an SMS through the enabled SMS provider */
+    async sendSms(to: string, message: string): Promise<{ provider: string }> {
+        const rows = await this.configRepository.find({ where: { category: "sms", enabled: true } });
+        const row = rows[0];
+        if (!row) throw HttpErrorFactory.badRequest("短信服务未启用");
+        const cfg = await this.smsConfig(row.provider);
+
+        if (row.provider === "twilio") {
+            const auth = Buffer.from(`${cfg.accountSid}:${cfg.authToken}`).toString("base64");
+            const res = await fetch(
+                `https://api.twilio.com/2010-04-01/Accounts/${cfg.accountSid}/Messages.json`,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Basic ${auth}`,
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    body: new URLSearchParams({ To: to, From: cfg.from ?? "", Body: message }),
+                },
+            );
+            if (!res.ok) throw new Error(`Twilio HTTP ${res.status}`);
+        } else if (row.provider === "vonage") {
+            const res = await fetch("https://rest.nexmo.com/sms/json", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    api_key: cfg.apiKey,
+                    api_secret: cfg.apiSecret,
+                    to: to.replace(/^\+/, ""),
+                    from: cfg.from ?? "HelloDrama",
+                    text: message,
+                }),
+            });
+            if (!res.ok) throw new Error(`Vonage HTTP ${res.status}`);
+        } else if (row.provider === "infobip") {
+            const res = await fetch("https://api.infobip.com/sms/2/text/advanced", {
+                method: "POST",
+                headers: {
+                    Authorization: `App ${cfg.apiKey ?? ""}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    messages: [
+                        { from: cfg.sender ?? "HelloDrama", destinations: [{ to }], text: message },
+                    ],
+                }),
+            });
+            if (!res.ok) throw new Error(`Infobip HTTP ${res.status}`);
+        }
+        return { provider: row.provider };
+    }
+
+    // ---------------- automation ----------------
+
+    /** nightly heat recompute (03:05) when the heat config is enabled */
+    @Cron("0 5 3 * * *")
+    async cronHeat() {
+        const row = await this.configRepository.findOneBy({
+            category: "heat",
+            provider: "algorithm",
+        });
+        if (!row?.enabled) return;
+        await this.computeHeat();
+        this.logger.log("cron: heat recomputed");
+    }
+
+    /** daily report email (09:00) when SMTP is enabled */
+    @Cron("0 0 9 * * *")
+    async cronDailyReport() {
+        const row = await this.configRepository.findOneBy({ category: "email", provider: "smtp" });
+        if (!row?.enabled) return;
+        const to = (row.config as Record<string, string>)?.username;
+        if (!to) return;
+
+        const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+        const res = (await this.dataSource.query(
+            "SELECT COALESCE(SUM(clicks),0) AS clicks, COALESCE(SUM(registrations),0) AS regs, COALESCE(SUM(spend),0) AS spend FROM drama.promo_daily WHERE stat_date = $1",
+            [yesterday],
+        )) as { clicks: string; regs: string; spend: string }[];
+        const rebates = (await this.dataSource.query(
+            "SELECT COALESCE(SUM(coins),0) AS coins, COUNT(*)::int AS cnt FROM drama.rebate_log WHERE created_at::date = $1",
+            [yesterday],
+        )) as { coins: string; cnt: number }[];
+
+        const html =
+            "<h2>HelloDrama 日报 " + yesterday + "</h2><ul>" +
+            "<li>点击：" + (res[0]?.clicks ?? 0) + "</li>" +
+            "<li>注册：" + (res[0]?.regs ?? 0) + "</li>" +
+            "<li>消耗：$" + (res[0]?.spend ?? "0") + "</li>" +
+            "<li>返佣：" + (rebates[0]?.coins ?? 0) + " 金币 / " + (rebates[0]?.cnt ?? 0) + " 笔</li></ul>";
+        await this.mailIfEnabled(to, "HelloDrama 日报 " + yesterday, html);
+        this.logger.log("cron: daily report mailed");
     }
 }

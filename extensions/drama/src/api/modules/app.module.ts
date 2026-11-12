@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { BannerModule } from "./banner/banner.module";
 import { CategoryModule } from "./category/category.module";
 import { ConfigCenterModule } from "./config-center/config-center.module";
+import { DistributionModule } from "./config-center/distribution.module";
 import { DramaModule } from "./drama/drama.module";
 import { EpisodeModule } from "./episode/episode.module";
 import { HelpModule } from "./help/help.module";
@@ -23,6 +24,7 @@ import { WatchModule } from "./watch/watch.module";
     imports: [
         CategoryModule,
         ConfigCenterModule,
+        DistributionModule,
         DramaModule,
         EpisodeModule,
         BannerModule,

@@ -7,6 +7,7 @@ import { Body, Get, Headers, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 
 import { CreateCoinOrderDto } from "../../dto";
+import { DistributionService } from "../../../config-center/distribution.service";
 import { PaymongoService } from "../../services/paymongo.service";
 import { PayService } from "../../services/pay.service";
 
@@ -18,6 +19,7 @@ export class PayWebController extends BaseController {
     constructor(
         private readonly payService: PayService,
         private readonly paymongoService: PaymongoService,
+        private readonly distributionService: DistributionService,
     ) {
         super();
     }
@@ -106,5 +108,28 @@ export class PayWebController extends BaseController {
     @Post("redeem")
     async redeem(@Playground() user: UserPlayground, @Body("code") code: string) {
         return this.payService.redeem(user.id, code ?? "");
+    }
+    /**
+     * Coin purchase of a VIP package → grants/extends drama VIP membership
+     */
+    @Post("vip/purchase")
+    async purchaseVip(@Playground() user: UserPlayground, @Body() dto: { packageId: string }) {
+        return this.payService.purchaseVipWithCoins(user.id, dto.packageId);
+    }
+
+    /**
+     * Distribution center (H5): invite code, invitees, rebate log
+     */
+    @Get("distribution/my")
+    async myDistribution(@Playground() user: UserPlayground) {
+        return this.distributionService.myDistribution(user.id);
+    }
+
+    /**
+     * Bind caller to an inviter by invite code (one-time)
+     */
+    @Post("distribution/bind")
+    async bindInviter(@Playground() user: UserPlayground, @Body() dto: { code: string }) {
+        return this.distributionService.bind(user.id, dto.code);
     }
 }

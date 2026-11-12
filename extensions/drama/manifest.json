@@ -2,7 +2,7 @@
     "identifier": "drama",
     "name": "海外短剧",
     "type": "application",
-    "version": "0.6.2",
+    "version": "0.7.0",
     "description": "海外短剧内容管理：剧目、剧集、分类、轮播图",
     "homepage": "",
     "author": {
@@ -11,6 +11,11 @@
         "homepage": ""
     },
     "changelog": [
+        {
+            "version": "0.7.0",
+            "date": "2026-11-01",
+            "content": "分销返佣引擎（邀请码/三级分佣随充值入账/邀请奖励/H5分销中心/控制台报表）；VIP金币购买闭环（drama VIP 自治体系+权益校验）；兑换码 H5 入口；H5 小说阅读器（书城/详情/阅读器）与首页书城入口；SMTP 发信 + 邮件测试；OAuth 三方登录（Google/Facebook/Apple）；FCM/OneSignal 推送与 Twilio/Vonage/Infobip 短信发送器；热度日自动重算 + 日报邮件"
+        },
         {
             "version": "0.6.2",
             "date": "2026-10-30",

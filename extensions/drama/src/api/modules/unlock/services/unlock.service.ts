@@ -5,6 +5,7 @@ import { HttpErrorFactory } from "@buildingai/errors";
 import { ExtensionBillingService } from "@buildingai/extension-sdk";
 import { Injectable, Logger } from "@nestjs/common";
 
+import { VipMembership } from "../../../db/entities/distribution-entities.entity";
 import { Drama } from "../../../db/entities/drama.entity";
 import { Episode } from "../../../db/entities/episode.entity";
 import { UnlockRecord, UnlockType } from "../../../db/entities/unlock-record.entity";
@@ -307,7 +308,11 @@ export class UnlockService extends BaseService<UnlockRecord> {
         const count = await repo.count({
             where: { userId, endTime: MoreThan(new Date()) },
         });
-        return count > 0;
+        if (count > 0) return true;
+        // drama-scoped VIP (coin-purchased vip packages)
+        const vipRepo = this.dataSource.getRepository(VipMembership);
+        const vip = await vipRepo.findOneBy({ userId });
+        return Boolean(vip && new Date(vip.endTime) > new Date());
     }
 
     private isUniqueViolation(err: unknown): boolean {

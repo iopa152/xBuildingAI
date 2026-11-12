@@ -17,6 +17,7 @@ import RatingManagePage from "./pages/console/record/rating";
 import LanguagePage from "./pages/console/ops/language";
 import PlaylistPage from "./pages/console/ops/playlist";
 import OpsPage from "./pages/console/ops";
+import DistributionReportPage from "./pages/console/stats/distribution";
 import MemberPage from "./pages/console/stats/member";
 import StatsOverviewPage from "./pages/console/stats/overview";
 import PayConfigPage from "./pages/console/pay/config";
@@ -115,6 +116,7 @@ export const routeOption = defineRouteOption({
                 { title: "会员分组管理", path: "/member/group", icon: "users-round" },
                 { title: "会员规则管理", path: "/member/rule", icon: "list-checks" },
                 { title: "会员积分管理", path: "/member/score", icon: "coins" },
+                { title: "分销报表", path: "/distribution/report", icon: "bar-chart" },
                 { title: "签到配置", path: "/task/checkin", icon: "calendar-days" },
                 { title: "签到记录", path: "/task/checkin-records", icon: "calendar-clock" },
             ],
@@ -366,6 +368,10 @@ export const routeOption = defineRouteOption({
         {
             path: "member/rule",
             element: <MemberRulePage />,
+        },
+        {
+            path: "distribution/report",
+            element: <DistributionReportPage />,
         },
         {
             path: "member/score",

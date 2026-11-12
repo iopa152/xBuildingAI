@@ -5,6 +5,7 @@ import { Module } from "@nestjs/common";
 import { AirwallexConfig } from "../../db/entities/airwallex-config.entity";
 import { PaymongoConfig } from "../../db/entities/paymongo-config.entity";
 import { CoinOrder, CoinPackage, RedeemCode, RedeemRecord, StripeConfig, VipPackage } from "../../db/entities/pay-entities.entity";
+import { DistributionModule } from "../config-center/distribution.module";
 import { PromotionModule } from "../promotion/promotion.module";
 import { AirwallexConsoleController, AirwallexWebController } from "./controllers/airwallex.controller";
 import { PaymongoConsoleController, PaymongoWebController } from "./controllers/paymongo.controller";
@@ -27,6 +28,7 @@ import { PayService } from "./services/pay.service";
             RedeemRecord,
         ]),
         ExtensionBillingModule,
+        DistributionModule,
         PromotionModule,
     ],
     controllers: [

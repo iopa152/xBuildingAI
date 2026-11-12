@@ -1,7 +1,7 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionConsoleController, ExtensionWebController } from "@buildingai/core/decorators";
 import { Public } from "@buildingai/decorators/public.decorator";
-import { Body, Get, Param, Post, Put } from "@nestjs/common";
+import { Body, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { IsArray, IsBoolean, IsObject, IsOptional, IsString, MaxLength } from "class-validator";
 
 import { ConfigCenterService } from "./config-center.service";
@@ -68,6 +68,21 @@ export class ConfigCenterConsoleController extends BaseController {
         @Param("provider") provider: string,
     ) {
         return this.service.testConnection(category, provider);
+    }
+
+    @Post("email/smtp/send-test")
+    sendTestEmail(@Body() dto: { to: string }) {
+        return this.service.sendTestEmail(dto.to);
+    }
+
+    @Post("push/send-test")
+    sendTestPush(@Body() dto: { title?: string; body?: string; target?: string }) {
+        return this.service.sendPush(dto.title ?? "测试推送", dto.body ?? "HelloDrama 测试推送", dto.target);
+    }
+
+    @Post("sms/send-test")
+    sendTestSms(@Body() dto: { to: string; message?: string }) {
+        return this.service.sendSms(dto.to, dto.message ?? "HelloDrama 测试短信");
     }
 
     @Post("heat/compute")

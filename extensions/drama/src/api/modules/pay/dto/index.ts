@@ -25,6 +25,10 @@ export class CreateCoinOrderDto {
     @Min(0.01)
     price!: number;
 
+    @IsInt()
+    @Min(0)
+    coinPrice?: number;
+
     @IsString()
     @Length(2, 8)
     @IsOptional()
@@ -99,6 +103,10 @@ export class CreateCoinPackageDto {
     @Min(0.01)
     price!: number;
 
+    @IsInt()
+    @Min(0)
+    coinPrice?: number;
+
     @IsNumber()
     @Min(0)
     @IsOptional()
@@ -167,6 +175,11 @@ export class UpdateCoinPackageDto {
     @IsOptional()
     price?: number;
 
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    coinPrice?: number;
+
     @IsNumber()
     @Min(0)
     @IsOptional()
@@ -230,6 +243,10 @@ export class CreateVipPackageDto {
     @IsNumber()
     @Min(0.01)
     price!: number;
+
+    @IsInt()
+    @Min(0)
+    coinPrice?: number;
 
     @IsNumber()
     @Min(0)
@@ -317,6 +334,11 @@ export class UpdateVipPackageDto {
     @IsNumber()
     @Min(0.01)
     @IsOptional()
+    @IsInt()
+    @Min(0)
+    @IsOptional()
+    coinPrice?: number;
+
     price?: number;
 
     @IsNumber()

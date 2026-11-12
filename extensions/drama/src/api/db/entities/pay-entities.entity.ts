@@ -281,6 +281,9 @@ export class VipPackage {
 
     @UpdateDateColumn({ comment: "更新时间" })
     updatedAt: Date;
+    /** 金币购买价（0 = 仅支持货币支付） */
+    @Column({ type: "int", default: 0, comment: "金币购买价" })
+    coinPrice: number;
 }
 
 /**

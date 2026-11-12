@@ -18,6 +18,7 @@ import {
     VipDurationType,
     VipPackage,
 } from "../../../db/entities/pay-entities.entity";
+import { DistributionService } from "../../config-center/distribution.service";
 import { PromotionService } from "../../promotion/services/promotion.service";
 
 /**
@@ -41,6 +42,7 @@ export class PayService extends BaseService<CoinOrder> {
         private readonly billingService: ExtensionBillingService,
         private readonly promotionService: PromotionService,
         private readonly dataSource: DataSource,
+        private readonly distributionService: DistributionService,
     ) {
         super(orderRepository);
     }
@@ -267,6 +269,29 @@ export class PayService extends BaseService<CoinOrder> {
         }));
     }
 
+    /**
+     * Coin purchase of a VIP package: single transaction (deduct then grant),
+     * extends the existing membership when still active.
+     */
+    async purchaseVipWithCoins(userId: string, packageId: string) {
+        const pkg = await this.vipPackageRepository().findOneBy({ id: packageId, enabled: true });
+        if (!pkg) throw HttpErrorFactory.notFound("VIP套餐不存在或已下架");
+        const coinPrice = Number(pkg.coinPrice ?? 0);
+        if (coinPrice <= 0) {
+            throw HttpErrorFactory.badRequest("该套餐暂不支持金币购买");
+        }
+
+        // billing service does the row lock + balance check + account log
+        await this.billingService.deductUserPower({
+            userId,
+            amount: coinPrice,
+            remark: `VIP会员购买 ${pkg.name}`,
+        });
+
+        await this.distributionService.grantVip(userId, pkg.id, pkg.days);
+        return { success: true, coinPrice, days: pkg.days };
+    }
+
     async createVipPackage(dto: Partial<VipPackage> & { price: number; days: number }) {
         return this.vipPackageRepository().save(
             this.vipPackageRepository().create({
@@ -279,6 +304,7 @@ export class PayService extends BaseService<CoinOrder> {
                 phpOriginalPrice: dto.phpOriginalPrice ? dto.phpOriginalPrice.toFixed(2) : null,
                 tag: dto.tag || null,
                 autoRenew: dto.autoRenew ?? false,
+                coinPrice: dto.coinPrice ?? 0,
                 iosProductId: dto.iosProductId?.trim() || null,
                 androidProductId: dto.androidProductId?.trim() || null,
                 googleBasePlanId: dto.googleBasePlanId?.trim() || null,
@@ -314,6 +340,7 @@ export class PayService extends BaseService<CoinOrder> {
             }
         }
         if (dto.days !== undefined) patch.days = dto.days;
+        if (dto.coinPrice !== undefined) patch.coinPrice = Math.max(0, Number(dto.coinPrice) || 0);
         if (dto.price !== undefined) patch.price = dto.price.toFixed(2);
         if (dto.originalPrice !== undefined)
             patch.originalPrice = dto.originalPrice ? dto.originalPrice.toFixed(2) : null;
@@ -502,6 +529,12 @@ export class PayService extends BaseService<CoinOrder> {
                     )
                     .catch(() => undefined);
             }
+
+            // fire-and-forget: 3-level distribution rebate on the credited
+            // coins (inside the tx scope; onPaidOrder swallows its own errors)
+            await this.distributionService
+                .onPaidOrder(order.userId, orderNo, order.coins)
+                .catch(() => undefined);
         });
     }
 
@@ -848,6 +881,13 @@ export class PayService extends BaseService<CoinOrder> {
                 throw HttpErrorFactory.notFound("用户不存在");
             }
 
+            // per-user dedup: the same user cannot farm one code twice
+            const recordRepo = em.getRepository(RedeemRecord);
+            const dup = await recordRepo.findOne({ where: { code: row.code, userId } });
+            if (dup) {
+                throw HttpErrorFactory.badRequest("您已兑换过该兑换码");
+            }
+
             const record: Partial<RedeemRecord> = {
                 code: row.code,
                 activityName: row.activityName,
@@ -902,7 +942,7 @@ export class PayService extends BaseService<CoinOrder> {
             }
 
             await codeRepo.update({ id: row.id }, { usedCount: row.usedCount + 1 });
-            await em.save(RedeemRecord, em.create(RedeemRecord, record));
+            await recordRepo.save(recordRepo.create(record));
             return {
                 success: true,
                 rewardType: row.rewardType,

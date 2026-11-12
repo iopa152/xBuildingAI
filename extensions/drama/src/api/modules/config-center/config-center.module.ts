@@ -8,6 +8,8 @@ import { StripeConfig } from "../../db/entities/pay-entities.entity";
 import { VodConfig } from "../../db/entities/vod-config.entity";
 import { Drama } from "../../db/entities/drama.entity";
 import { ConfigCenterConsoleController, ConfigCenterWebController } from "./config-center.controller";
+import { OauthService } from "./oauth.service";
+import { OauthWebController } from "./oauth.web.controller";
 import { ConfigCenterService } from "./config-center.service";
 
 @Module({
@@ -21,8 +23,8 @@ import { ConfigCenterService } from "./config-center.service";
             Drama,
         ]),
     ],
-    controllers: [ConfigCenterConsoleController, ConfigCenterWebController],
-    providers: [ConfigCenterService],
+    controllers: [ConfigCenterConsoleController, ConfigCenterWebController, OauthWebController],
+    providers: [ConfigCenterService, OauthService],
     exports: [ConfigCenterService],
 })
 export class ConfigCenterModule {}

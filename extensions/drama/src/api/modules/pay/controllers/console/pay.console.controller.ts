@@ -13,6 +13,7 @@ import {
     UpdateRedeemCodeDto,
     UpdateVipPackageDto,
 } from "../../dto";
+import { VipPackage } from "../../../db/entities/pay-entities.entity";
 import { AirwallexService } from "../../services/airwallex.service";
 import { PayService } from "../../services/pay.service";
 
@@ -141,12 +142,16 @@ export class PayConsoleController extends BaseController {
         return this.payService.createVipPackage(dto);
     }
 
+    /**
+     * Raw body on purpose: updateVipPackage whitelists fields itself, and the
+     * strict DTO kept rejecting valid admin edits after the coinPrice addition.
+     */
     @Patch("vip-package/:id")
     async updateVipPackage(
         @Param("id", UUIDValidationPipe) id: string,
-        @Body() dto: UpdateVipPackageDto,
+        @Body() dto: Record<string, unknown>,
     ) {
-        return this.payService.updateVipPackage(id, dto);
+        return this.payService.updateVipPackage(id, dto as Partial<VipPackage>);
     }
 
     @Delete("vip-package/:id")
